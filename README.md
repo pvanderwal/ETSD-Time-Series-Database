@@ -20,7 +20,7 @@ Currently designed to handle storing unsigned integers, but can store signed int
 If used to store energy data at 10 second intervals, a Full Stream can accurately store Watt-Second data for average power levels up to approx 6,500 watts, an extended full stream (18 bits) can handle average power levels up to approx 26kw.
 
 You can also designate up to 8 autoscaling streams (16 bits only) that can store power levels up to 52kw, but can have small error rates in a given data block, these errors are corrected by saving the 32 bit register in the next block.  
-Auto-Scaling is set for the entire block on a stream by stream bsis and will automatically select the scaling needed to store the maximum power level that occurs during that block.
+Auto-Scaling is set for the entire block on a stream by stream basis and will automatically select the scaling needed to store the maximum power level that occurs during that block.
 Scaling not required on any channel less than ~6.5kW (240V @ ~27A), zero storage error
 2x scaling can handle 13.1kW (240V @ ~54.5A)	up to 1 watt second error per interval`
 4x scaling can handle 26.2kW (240V @ ~109A)     up to 2 second error per interval
