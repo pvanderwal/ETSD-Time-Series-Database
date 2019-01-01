@@ -1,5 +1,5 @@
 /*************************************************************************
-etsdtool.c library.  Used to create an ETSD time series database, convert an ETSD to RRD database, and display info on an ETSD. 
+etsdQuery.c library.  Used to create an ETSD time series database, convert an ETSD to RRD database, and display info on an ETSD. 
 
 Copyright 2018 Peter VanDerWal 
     This program is free software: you can redistribute it and/or modify
