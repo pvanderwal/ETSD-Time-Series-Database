@@ -1,0 +1,33 @@
+//build errorlog shared library
+gcc errorlog.c -c -fpic
+gcc *.o -shared -o /usr/local/lib/libelog.so
+rm *.o
+
+//build eshm shared library
+gcc eshm.c -lelog -c -fpic
+gcc *.o -shared -o /usr/local/lib/libeshm.so
+rm *.o
+
+//build etsdsave shared library
+gcc etsdSave.c -lelog -c -fpic
+gcc *.o -shared -o /usr/local/lib/libetsdSave.so
+rm *.o
+
+//build etsdread shared library
+gcc etsdRead.c -letsdSave -lelog -c -fpic
+gcc *.o -shared -o /usr/local/lib/libetsdRead.so
+rm *.o
+
+//build etsdQ shared library
+gcc etsdQuery.c -letsdSave -letsdRead -lelog -lrrd -c -fpic
+gcc *.o -shared -o /usr/local/lib/libetsdQ.so
+rm *.o
+
+// update ldconfig cache
+ldconfig
+
+// build etsdCmd
+gcc -o etsdCmd etsdCmd.c -lelog -letsdSave -letsdRead -letsdQ -lrrd
+
+// <optional> build edd
+gcc -o edd edd.c -lelog -lecmR -leshm -letsdSave -lrrd -lrt  
