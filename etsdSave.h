@@ -15,11 +15,15 @@ Copyright 2018 Peter VanDerWal
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 *********************************************************************************/
 
-#ifndef __etsd_h__
-#define __etsd_h__
+#ifndef __etsdsave_h__
+#define __etsdsave_h__
 
 #ifdef __cplusplus
 extern "C" {
+#endif
+
+#ifndef BLOCKSIZE
+#define BLOCKSIZE 512
 #endif
 
 #define SRC_TYPE(a) (EtsdInfo.source[(a)]&192)
@@ -37,6 +41,8 @@ extern "C" {
 
 #define ETSD_Type(a) (EtsdInfo.destination[(a)]&15) 
 
+#define VALID_INTERVALS (PBlock.data[2] & 127 )
+extern uint32_t *lastReading;
 
 typedef struct { 
     uint16_t header;
@@ -134,6 +140,7 @@ void saveExtS(uint8_t interV, uint8_t extS, uint8_t dummy, uint32_t data);
 
 // saveChan() automagically determines the right type of stream to save data to based on header block info.  
 // Also tracks previous values on "relative" streams (make sure to call etsdInitArrays() on program startup)
+// valid chan = 0 thru (EtsdInfo.channels-1)
 // call with interV = 0 to save registers and reset counter variables.
 // call with interV > 0 to save data as either Relative or Absolute based on header block info.
 void saveChan(uint8_t interV, uint8_t chan, uint8_t dataInvalid, int data);
