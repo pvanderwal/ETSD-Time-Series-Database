@@ -1,3 +1,20 @@
+/*************************************************************************
+ etsdSave library for saving data to an ETSD time series database 
+
+Copyright 2018 Peter VanDerWal 
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License version 2.0 as published by
+    the Free Software Foundation
+    
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*********************************************************************************/
+    
 #include <time.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -34,11 +51,11 @@ int etsdInit(char *fName, uint8_t loadLabels) {
         ELog(__func__, 0);
         return -1; // error can't open etsdFile for reading
     }
-    if (0x45676643 == PBlock.longD[0]) {
-        EtsdInfo.header = PBlock.data[2] & 65472;  	//grab the MSbx10
-        EtsdInfo.blockIntervals = (PBlock.data[2] >> 6) & 63;
-        EtsdInfo.channels = PBlock.data[2] & 63;    // etsd ver 1.0 supports 63 channels max
-        EtsdInfo.intervalTime = PBlock.data[3];         // ~18.2 hours maximum interval.
+    if (0x45676643 == PBlock.longD[0]) { // check to make sure block starts with "CfgE"
+        EtsdInfo.header = PBlock.data[2] & 65408;  	//grab the MSbx9
+        EtsdInfo.blockIntervals = (PBlock.data[2] >> 7) & 127;
+        EtsdInfo.channels = PBlock.data[2] & 127;    // etsd ver 1.0 supports 127 channels max
+        EtsdInfo.intervalTime = PBlock.data[3];     // ~18.2 hours maximum interval.
         EtsdInfo.labelSize = PBlock.byteD[8];
         EtsdInfo.dataBytes = PBlock.byteD[9];
         
@@ -59,7 +76,7 @@ int etsdInit(char *fName, uint8_t loadLabels) {
                 EtsdInfo.rrdCnt++;
         }
         if (loadLabels) {
-//            lp=512;
+//            lp=BLOCKSIZE;
 //            while(!(PBlock.byteD[--lp]));  //find the end of the labels
 //            EtsdInfo.labelBlob = (char*)calloc(lp - 2*EtsdInfo.channels - 8, sizeof(char));
             EtsdInfo.labelBlob = (char*)calloc(EtsdInfo.labelSize*2, sizeof(char));  // allocate blob of space to hold all the labels
@@ -74,6 +91,7 @@ int etsdInit(char *fName, uint8_t loadLabels) {
                 EtsdInfo.label[lp] = EtsdInfo.labelBlob+idx;
             }
         }
+
         EtsdInfo.extStart = 8.75 + EtsdInfo.blockIntervals * streams/4.0; 
         EtsdInfo.dataStart =  EtsdInfo.extStart + extSCnt/4.0 + 0.75;
     } else {
@@ -124,9 +142,9 @@ int etsdRW(char *mode, int sector){
         case 'r':     
             if (etsd > 0) {
                 if(sector)
-                    if(fseek(etsd, sector*512, sector<0?SEEK_END:SEEK_SET))  
+                    if(fseek(etsd, sector*BLOCKSIZE, sector<0?SEEK_END:SEEK_SET))  
                         ErrorCode |= E_SEEK;
-                if(1 != fread(&PBlock, 512, 1, etsd)){ 
+                if(1 != fread(&PBlock, BLOCKSIZE, 1, etsd)){ 
                     ErrorCode |= E_EOF;
                     return -1;
                 }
@@ -138,7 +156,7 @@ int etsdRW(char *mode, int sector){
         case 'a':
         case 'w':
             if (etsd > 0) {
-                fwrite(&PBlock, 512, 1, etsd);
+                fwrite(&PBlock, BLOCKSIZE, 1, etsd);
             } else {
                 ErrorCode |= E_CANT_WRITE;
                 return -1;
@@ -151,11 +169,11 @@ int etsdRW(char *mode, int sector){
 
 // write etsd block to disk
 int etsdCommit(uint8_t interV){  // write etsd block to disk
-    PBlock.data[2] |= interV & 63;
+    PBlock.data[2] |= interV; //pete
     if (EtsdInfo.fileName != NULL){ 
         if(etsdRW("a", 0)){   // if we can't write to etsd File, error and exit
             ELog(__func__, 1);
-            LogBlock(&PBlock.byteD, 512); // try to save current ETSD block to the error log
+            LogBlock(&PBlock.byteD, "ETSD", BLOCKSIZE); // try to save current ETSD block to the error log
             exit(1);
         }
         if(RotateEtsd){  
@@ -196,18 +214,24 @@ int etsdRotate() {
 }
 
 // Convert signed value to <bits> size etsd format 
-// returns 0xFFFFFFFF(error) if data is too large to fit
+// returns 0xFFFFFFFF(error) if data is too large to fit in the given number of bits
 uint32_t etsdFromSigned(uint8_t bits, int32_t data) {
     int32_t negative = 1 << (bits-1);
     int32_t maxV = negative - 1;
     if (0 > data) {
-        data = 0-data;     
+        if (0-data > maxV){
+            ErrorCode |= E_DATA;
+            data = 0xFFFFFFFF;
+        } else {
+            data = negative & (1-data); 
+        }
     } else {
-        negative = 0;
+        if (maxV < data){
+            ErrorCode |= E_DATA;
+            data = 0xFFFFFFFF;
+        }
     }
-    if (maxV < data)
-        return 0xFFFFFFFF;
-    return negative & data;
+    return data;
 }
 
 // save "extra data"
@@ -221,13 +245,13 @@ uint8_t etsdReadByte(uint16_t addr) {
 }
 
 
-//reg = 0-??,  registers (32bit values) are saved starting at end of Block, working back towards front.
+//reg = 1-??,  registers (32bit values) are saved starting at end of Block, working back towards front.
 void saveReg(uint8_t reg, uint32_t data){
-	PBlock.longD[127-reg] = data;
+	PBlock.longD[BLOCKSIZE/4-reg] = data;
 }
 
 
-// Auto-Scaling works on full streams only. Can handle any value up to 524272, larger values save as all '1's (65535)
+// Auto-Scaling works on full streams only. Can handle any value up to 524,287, larger values save as all '1's (65535)
 // do NOT call when interV = 0
 // ASC = Auto-Scaling channel 0-7, QS = quarter stream ID.   
 void saveAutoS(uint8_t interV, uint8_t ASC, uint8_t QS, uint32_t data){
@@ -241,6 +265,7 @@ void saveAutoS(uint8_t interV, uint8_t ASC, uint8_t QS, uint32_t data){
         if(excess<3)    //second step
             excess++;
         if(3 < excess+currentScaling) { // is value too large to scale?
+            ErrorCode |= E_DATA;
             data = 65535<<currentScaling;   // set to error value
             goodData = 0;
         } else {  // value can be scaled
@@ -259,7 +284,7 @@ void saveAutoS(uint8_t interV, uint8_t ASC, uint8_t QS, uint32_t data){
     } 
     data >>= currentScaling;
     if ( goodData && 65535 == data)  
-        data--;                         // avoid saving valid data as error value
+        data--;                         // avoid saving valid data as all ones (invalid)
     PBlock.data[streamStart + interV ] = data;
 }
 
@@ -278,18 +303,21 @@ void saveExtS(uint8_t interV, uint8_t extS, uint8_t dummy, uint32_t data){
 }
 
 // extS: 0=don't save extended data, otherwise indicates which extS stream to use
-// QS = 0 - ??.  Valid Data = 0-65535 without extS, 0-262142 with extS
+// QS = 0 - ??.  Valid Data = 0-65534 without extS, 0-262142 with extS
 // do NOT call when interV = 0, valid intervals are 1 to (EtsdInfo.blockIntervals)
 void saveFS(uint8_t interV, uint8_t extS, uint8_t QS, uint32_t data){
     if (extS) {  
         if (262143 < data) { // 262142 is largest (valid) value that can be saved with extended data
+            ErrorCode |= E_DATA;
             data = 262143; 
         }
         saveExtS(interV, extS, 0, data>>16);    
         data &= 65535;
     } else {
-        if (65535< data) // 65535 is largest value that can be saved without extended data
+        if (65535< data){ // 65535 is largest value that can be saved without extended data
+            ErrorCode |= E_DATA;
             data = 65535;
+        }
     }
     PBlock.data[3 + QS/4 * EtsdInfo.blockIntervals + interV ] = data;
 }
@@ -298,12 +326,16 @@ void saveFS(uint8_t interV, uint8_t extS, uint8_t QS, uint32_t data){
 // QS = 0-??(QS x 2)
 void saveHS(uint8_t  interV, uint8_t extS, uint8_t QS, uint32_t data){
     if (extS ) {   
-    if (1023 < data) // 1023 is the largest value that can be stored using extended data
-        data = 1023;
-    saveExtS(interV, extS, 0, data>>8); // & 3;        
+        if (1023 < data){ // 1023 is the largest value that can be stored using extended data
+            ErrorCode |= E_DATA;
+            data = 1023;
+        }
+        saveExtS(interV, extS, 0, data>>8); // & 3;        
     } else 
-        if (255< data)
+        if (255< data){
+            ErrorCode |= E_DATA;
             data = 255;
+        }
 	PBlock.byteD[7 + QS/2 * EtsdInfo.blockIntervals + interV] = data;
 }
 
@@ -314,12 +346,16 @@ void saveQS(uint8_t  interV, uint8_t extS, uint8_t  QS, uint32_t data){
 	uint16_t  addr = 7 + QS*(EtsdInfo.blockIntervals/2) + (uint_fast8_t)((interV+1)/2);  //pete check this, does it need blockintervals/2.0?
 	uint8_t  shft = (interV&01)*4;
     if (extS) {
-        if (63 < data) // 63 is the largest value that can be stored using extended data
+        if (63 < data){ // 63 is the largest value that can be stored using extended data
+            ErrorCode |= E_DATA;
             data = 63;
+        }
         saveExtS(interV, extS, 0, data>>4); // & 3;        
     } else 
-        if (15< data)
+        if (15< data){
+            ErrorCode |= E_DATA;
             data = 15;
+        }
 	PBlock.byteD[addr] = (PBlock.byteD[addr]&(240>>shft)) + ((data&15)<<shft);
 }
 
@@ -329,7 +365,7 @@ void saveQS(uint8_t  interV, uint8_t extS, uint8_t  QS, uint32_t data){
 // call with interV = 0 to save registers and reset counter variables.
 // call with interV > 0 to save data as either Relative or Absolute based on header block info.
 // Note: declaring data as 'int' should allows passing pointers to floats if needed for future upgrades
-void saveChan(uint8_t interV, uint8_t chan, uint8_t dataInvalid, int data){
+void saveChan(uint8_t interV, uint8_t chan, uint8_t dataInvalid, int32_t data){
     uint32_t etsdData;
     uint8_t lp, missed, goodUpdate, extS, extSCh=0, AS=0, relCh=chan, reg=0, QS=0;
     void (*funct_ptr)(uint8_t  interV, uint8_t extS, uint8_t  QS, uint32_t data);  // any float data needs to be converted BEFORE calling function_pointer
@@ -368,7 +404,11 @@ void saveChan(uint8_t interV, uint8_t chan, uint8_t dataInvalid, int data){
     if (interV) {   
 //Log("saveChan Interval: %d - Channel #: %d - dataInvalid: %d \n", interV, chan, dataInvalid);
         if(!CNT_bit(chan) || dataInvalid){    // Guage channel or invalid data
-            etsdData = data; 
+            if(INT_bit(chan)){
+                etsdData = etsdFromSigned(2*ETSD_Type(chan), data);
+            } else {
+                etsdData = data; 
+            }
             goodUpdate = 0; // ignored if Guage
             missed = 1; // don't update previous values when Absolute
         } else {        // Relative value with good data
@@ -421,8 +461,12 @@ void saveChan(uint8_t interV, uint8_t chan, uint8_t dataInvalid, int data){
                 missedUpdate[relCh]++;
         }
     } else {  // interV = 0, save registers
-        if (!dataInvalid && REG_bit(chan)) 
+        if (!dataInvalid && REG_bit(chan)) {
+            if(0xffffffff==data)    // all ones would normaly indicate invalid data, so 
+                data--;             // subtract 1 before saving it.
             saveReg(reg, data);
+            //pete lastREading??  do I need to update it now?
+        }
     }
     if(!dataInvalid&&CNT_bit(chan)){        // update lastReading if data is valiad and saving counter/relative data to stream
         lastReading[relCh] = data==0xffffffff?0:data; // if valid data = 0xffffffff then lastReading would indicate we've never seen good data
