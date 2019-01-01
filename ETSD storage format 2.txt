@@ -57,22 +57,22 @@ Maybe in version 2
         this would allow more than 100 channels, potentially up to 255?
 
 
-ECM Channel Numbers
+ECM Channel Numbers under ETSD
 32 bit channels
-    Ch#
-    1   Ch1A
-    2   Ch2A
-    3   Ch1P
-    4   Ch2P
-    5   Aux1
-    6   Aux2
-    7   Aux3
-    8   Aux4
-    9   Aux5
+    Ch# 	Brultech label
+    1   	Ch1A
+    2   	Ch2A
+    3   	Ch1P
+    4   	Ch2P
+    5   	Aux1
+    6   	Aux2
+    7   	Aux3
+    8   	Aux4
+    9   	Aux5
 
 16 bit channels
     Ch#
-    10  DCV (Connected to Aux5)
-    11  ACV
-    24  CH1 Current
-    25  CH2 Current
+    10  	DCV (Connected to Aux5)
+    11  	ACV
+    24  	CH1 Current
+    25  	CH2 Current
