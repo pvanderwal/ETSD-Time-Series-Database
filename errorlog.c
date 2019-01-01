@@ -28,45 +28,79 @@ char *LogFile;
 int8_t LogLvl;
 uint32_t ErrorCode;
 
-// you can just change loglvl by calling with fName=""
+char *errLvl[]={
+    "<0>Panic",
+    "<1>Alert",
+    "<2>Critical",
+    "<3>Error",
+    "<4>Warning",
+    "<5>Notice",
+    "<6>Info",
+    "<7>Debug"
+};
+
+// only required if using a logfile instead of syslog.
 void LogSetup(const char *fName){
     LogFile = (char *) malloc(strlen(fName)+1);
     strcpy(LogFile,fName); 
     ErrorCode = 0;
 }
 
-// cfnm = calling function name + format string
-// Clear 1 = zero ErrorCode before returning
-// Returns current timestamp
+// cfnm = calling function name + optional text
+// Clear = clear ErrorCode before returning unless zero
 void ELog(const char *cfnm, uint8_t clear){
-    uint8_t idx=0;
+    uint8_t idx=0, eLvl=5;
     uint32_t eCode=ErrorCode;
+
     char *summary[]={
+        "Data is Invalid",
         "End of file reached",
-        "Check Sum error",
-        "Timed out waiting on serial data",
+        "Target time is BEFORE ETSD starts",
+        "Target time is AFTER ETSD ends",
+        "Target time is not in ETSD",
+        "Invalid start/stop time",   
+        "Invalid date/time format",
+        "Invalid arguement(s)",             
+        "Unknown error",
+        "Unknown error",
+        "Requested file is not an ETSD file",
         "Device specified is not a TTY device",
+        "Unknown error",
         "Can't get status of tty device",
         "Can't open/create shared memory object",
-        "File header block(0) not an ETSD file",
-        "Target time is BEFORE ETSD starts",
-        "Target  time is AFTER ETSD ends",
-        "Can't open file for reading",
         "Can't open file for writing",
+        "Can't open file for reading",
         "Error seeking sector",
-        "Unspecified coding error",
-        "Invalid date/time format"};
-    
-    while(eCode){
-        if(eCode&1)
-            Log("<3>Function %s() reports %s \n", cfnm, summary[idx]);
-        eCode >>= 1;
-        idx++;
+        "Check Sum error",
+        "Timed out waiting on serial data",
+        "Unknown Error", "Unknown Error", "Unknown Error", "Unknown Error", "Unknown Error", "Unknown Error", 
+        "Unknown Error", "Unknown Error", "Unknown Error", "Unknown Error", "Unknown Error", 
+        "Unspecified coding error"
+        };
+
+    if(0<LogLvl){       // only log errors when log level is greater than 0
+        if(2>LogLvl){   // only log <5>Notice' level errors if LogLvl is 2 or higher
+            eCode >>= 10;
+            idx=10;
+        }
+        while(eCode){
+            if(eCode&1)
+                if(9<idx) { // '<5>Notice' level errors are bits 0-9
+                    if(12<idx)
+                        eLvl=5; // '<3>Error' is bits 13-31
+                    else        
+                        eLvl=4;  // '<4>Warning' is levels bits 10-12
+                } 
+                Log("%s: %s %s \n", errLvl[eLvl], cfnm, summary[idx]);
+            eCode >>= 1;
+            idx++;
+        }
     }
     if(clear)
         ErrorCode = 0;
 }
 
+// uses printf() formating
 void Log(const char *format, ...){
     time_t now;
     char *currentTime;
@@ -94,19 +128,22 @@ void Log(const char *format, ...){
 }
 
 
-
-//1 print ecm, 2 print etsd
-void LogBlock(void *ptr, uint16_t size){
+// Logs an array of data in hex format, 16 bytes per line
+// "type" is a short (<5 char) description, size is the array size.
+void LogBlock(void *ptr, char *type, uint16_t size){
     char scratch[70], sblock[2000];
     uint8_t lp, lp2, *array = (uint8_t*)ptr; 
     uint16_t addr=0;
     
-    sprintf(sblock, "<6> %4s block", size > 70?"ETSD":"ECM");
-    for (lp=0; lp < size/16; lp++){
+    sprintf(sblock, "<6> %4s block", type);
+    for (lp=0; lp < (size+15)/16; lp++){
         sprintf(scratch, "\n[%2d] ", lp);
         strcat(sblock, scratch);
         for (lp2=0; lp2<16; lp2++){
-            sprintf(scratch, "%02X ", array[lp*16+lp2]);
+            if (lp*16+lp2 > size)
+                sprintf(scratch, "   ");
+            else
+                sprintf(scratch, "%02X ", array[lp*16+lp2]);
             strcat(sblock, scratch);
             if (7==lp2)
                 strcat(sblock, "| ");
