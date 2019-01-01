@@ -1,20 +1,21 @@
 Offers high reliability, each 'Block' of data occupies 1 512byte sector on hard drive, thumb drive or SD card.
 Each Block is self contained, so even if directory table is damaged you might be able to recover data by scanning Sectors.
 
-Data Block header
-    4 bytes         Epoch time at start of page (time when first ECM packet received)
-    2 bytes/16bit   MSb x4 = user ID , 6 bits =  Total intervals, bit 1-6 = Valid intervals    Note:  Unit Unique ID (UUID) = first 10 bits
-    2 bytes		    Auto-Scaling(default) for up to 8 Channels, 2 bits per Channel 1,2,4,8x  (if not using autoscale can be retasked by user)
-                        Note: 	8x scaling can handle ~218A @ 240V
+Note: A 'Channel' is the source of the data, a 'Stream' is the data coming from the Channel
+Header for Data Blocks
+    4 bytes    Epoch time at start of page (time when first ECM packet received)
+    2 bytes    MSb x2 = user ID | 7 bits =  Total intervals | 7 bits = Valid intervals    Note:  Unit Unique ID (UUID) = first 9 bits
+    2 bytes    Auto-Scaling(default) for up to 8 Channels, 2 bits per Channel 1,2,4,8x  (if not using autoscale can be retasked by user)
+                        Note: 	Autoscaling can handle values up to 524,287 (with a small storage error)
 
 This leaves 504 bytes  for data 
  
 The first block of each etsd file contains configuration data that maps Source Channels to Destination Streams.       
-    4 bytes 0x43666745  "CfgE"          Note: equals epoch date October 31, 2005 6:49:41 PM  (note: vers 1.0 only supports 1 block headers)
+    4 bytes 0x43666745  "CfgE"      Note: equals epoch date October 31, 2005 6:49:41 PM  (note: vers 1.0 only supports 1 block headers)
     2 bytes dbInfo      MSbx4: userID  | 6 bits: Total intervals | 6 bits: # of channels  //little endian
     2 bytes Intv Time   Note:  maximum interval = ~18 hours
-	1 byte  label size 1/2.  Multiply by 2 for label size. 
-    1 byte  extra data  Number of bytes
+    1 byte  label size 1/2.  Multiply by 2 for label size. 
+    1 byte  extra-data  Number of bytes reserved for extra data
 
     # of channels x 2 bytes per channel
         1 byte:     Source:       (MSbx2 >> 6) 0=Native(GEM, ECM, etc.), 1=SHM, 2=Other, 3=Other | (6 bits) source channel #   
@@ -23,22 +24,10 @@ The first block of each etsd file contains configuration data that maps Source C
 
     remaining bytes: etsd Channel labels, each label is a variable length and null terminated
 
-    Note: It's possible to mark a Source channel that does NOT map to an ETSD stream, these should come AFTER all ETSD streams
-          Otherwise channel numbers and stream numbers won't match which might cause confusion.
-          I.e if Channel 3 doesn't map to an ETSD stream, then channel 4 will map to stream 3, etc.
-
-            
   ETSD Stream Types           bits per interval
-    15 = Float Single Precision (32)  (possible future implementation)
-    14 = Float 1/2 Precision    (16)  (possible future implementation)
-    13 = Double Stream          (32)  (possible future implementation) 
-    12 = Large Stream           (24)  (possible future implementation) 
-    11 = Reserved
-    10 = AutoScale              (16)   up to 8 channels are available and automatically allocated (ONLY works with unsigned Ints!!!)      
+    10 = AutoScale              (16)   up to 8 channels are available and automatically allocated (ONLY works with unsigned Ints!!!) 
     9 = Extended Full Stream    (18)
     8 = Full Stream             (16)  
-    7 = reserved
-    6 = reserved             
     5 = Extended Half Stream    (10)
     4 = Half Stream             (8)
     3 = Extended Quarter Stream (6)
@@ -47,21 +36,27 @@ The first block of each etsd file contains configuration data that maps Source C
     
     0 = don't save to ETSD
 
- Note:   See https://en.wikipedia.org/wiki/Half-precision_floating-point_format for limitations on 1/2 precision floats 
-
+The following types are not currently supported but might be added in a future version
+   Double Stream    			32 bits                
+   Large Stream     			24 bits      
+   Single Precision floating point  	32 bits  
+   1/2 Precision floating point     	16 bits 
+   	See https://en.wikipedia.org/wiki/Half-precision_floating-point_format 
+	    for limitations on 1/2 precision floatsPlanned enhancements
 Planned enhancements
-    support signed integers
-    Add 1/2 precision floating point support (especially ARM version)
+    support signed integers (almost ready)
     Add 32bit signed & unsigned int streams
+    Add 1/2 precision floating point support (especially ARM version)
     Add single precision floating point support
 Possible     enhancements
-    allow extended 512byte headers 
-    add 24 and 32 bit streams, plus extended?
+    optional 1024 byte blocks
+    optional extended headers for 512byte blocks 
+    24 bit streams, plus extended?
 Maybe in version 2
-    use 2048 byte blocks instead of 512
-        this would allow more than 63 channels, potentially up to 255?
+    use 1024 or 2048 byte blocks instead of 512
+        this would allow more than 100 channels, potentially up to 255?
 
-                                  
+
 ECM Channel Numbers
 32 bit channels
     Ch#
@@ -77,7 +72,7 @@ ECM Channel Numbers
 
 16 bit channels
     Ch#
-    10  DCV
+    10  DCV (Connected to Aux5)
     11  ACV
     24  CH1 Current
     25  CH2 Current
