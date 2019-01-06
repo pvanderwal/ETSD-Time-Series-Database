@@ -26,9 +26,14 @@ extern "C" {
 #define BLOCKSIZE 512
 #endif
 
+const uint32_t ETSD_HEADER = 1146311749 ;   // decimal value of "ETSD"  
+// Note: ^epoch time equivalent is April 29, 2006 11:55:49 AM GMT, avoid saving data before that date :-)
+ 
+const uint32_t DATA_INVALID = 0xFFFFFFFF ; // all ones
+
+
 #define SRC_TYPE(a) (EtsdInfo.source[(a)]&192)
-      // simple test for source = ECM  i.e.   if(SRC-ECM(channel))
-#define SRC_ECM(a)  (!(EtsdInfo.source[(a)]&192)) 
+#define SRC_PRIMARY(a)  (!(EtsdInfo.source[(a)]&192)) 
 #define SRC_SHM(a)  (64==(EtsdInfo.source[(a)]&192))
 #define SRC_CHAN(a) (EtsdInfo.source[(a)]&63)
 
@@ -73,10 +78,11 @@ typedef union {
 
 extern PBLOCK PBlock;
 #define SCALING PBlock.data[3]
+#define TIME_STAMP PBlock.longD[0]
 
 
 //etsdInit returns zero on success or error code.  -11 can't open fName, -10= file header not etsd.
-int etsdInit(char *fName, uint8_t loadLabels);
+int32_t etsdInit(char *fName, uint8_t loadLabels);
 
 // If saving 'Relative' data to ETSD, you must initialize arrays first
 //void etsdInitArrays();
@@ -87,17 +93,18 @@ void etsdBlockClear(uint16_t val);
 // set current timestamp on block
 void etsdBlockStart();
 
-//write etsd block to disk
-int etsdCommit(uint8_t interV);
+// write etsd block to disk
+// returns zero on success, -1 if can't rotate files, exits if can't save to current file
+int32_t etsdCommit(uint8_t interV);
 
 // backs up current etsd file and opens a new one with the current name. Copies the first sector (db info) to new file
 // to avoid losing data, execute etsdCommit() before etsdRotate()
 // returns zero on success or error code (see above)
-int etsdRotate();
+int32_t etsdRotate();
 
 // mode 1=Read from beginning, 2=Write from beginning, 3=Append, 4=read from endk, 5=write from end
 // returns zero on success or error code (see above)
-int etsdRW(char *mode, int sector);
+int32_t etsdRW(char *mode, int32_t sector);
 
 //Convert signed value to 'bits' size etsd format  
 uint32_t etsdFromSigned(uint8_t bits, int32_t data);
