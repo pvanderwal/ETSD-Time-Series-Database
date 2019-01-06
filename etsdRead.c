@@ -36,11 +36,16 @@ int32_t etsdToSigned(uint8_t bits, uint32_t data) {
 // extS values 0 to (number of extended channels)
 // pete test this
 uint8_t readExtS(uint8_t interV, uint8_t extS){
-    uint8_t bAddr, startP, bPos;
-    bAddr =  (EtsdInfo.blockIntervals * (extS-1) + interV-1)/ 4;
-    bPos = ((EtsdInfo.blockIntervals*(extS-1) + interV - 1)/4.0 - bAddr)*8;
+    uint16_t startP = EtsdInfo.extStart + extS*EtsdInfo.blockIntervals/4;
+    float fAddr =  (EtsdInfo.blockIntervals * (extS) + interV-1)/ 4.0;
+    uint8_t bPos = (fAddr - (uint8_t)fAddr) * 8;
+    uint16_t bAddr = fAddr;   // pete check rules on converting floats to uints
+/*    uint8_t bAddr, startP, bPos;
+    bAddr =  (EtsdInfo.blockIntervals * (extS) + interV-1)/ 4;
+    bPos = ((EtsdInfo.blockIntervals*(extS) + interV - 1)/4.0 - bAddr)*8;
     startP = EtsdInfo.extStart + extS*EtsdInfo.blockIntervals/4;
-    return (etsdReadByte(bAddr+startP) >> bPos) & 3;
+*/
+    return ( (PBlock.byteD[bAddr+startP] >> bPos) & 3 );
 }
 
 // If data is invalid, returns zero plus ErrorCode = E_DATA
@@ -48,8 +53,8 @@ uint32_t readAutoS(uint8_t interV, uint8_t ASC, uint8_t QS){
     uint8_t currentScaling = (SCALING >> (2*ASC)) & 3;
     uint8_t streamStart = 3 + QS/4 * EtsdInfo.blockIntervals;  // points to PBlock.data so 8 bits is enough
     uint32_t data=PBlock.data[streamStart + interV];
-    data = data<65535?(data << currentScaling) + currentScaling :0xFFFFFFFF;
-    if (0xFFFFFFFF == data){
+    data = data<65535?(data << currentScaling) + currentScaling :DATA_INVALID;
+    if (DATA_INVALID == data){
         data=0;
         ErrorCode |= E_DATA;
     }
@@ -59,13 +64,13 @@ uint32_t readAutoS(uint8_t interV, uint8_t ASC, uint8_t QS){
 // If data is invalid, returns zero plus ErrorCode = E_DATA
 uint32_t readFS(uint8_t  interV, uint8_t extS, uint8_t QS){  
     uint32_t data = PBlock.data[3 + QS/4 * EtsdInfo.blockIntervals + interV];
-    if (extS) {
+    if (extS--) {
         data += ( readExtS(interV, extS) << 16 ) ;
-        data = data < 262143 ? data : 0xFFFFFFFF;
+        data = data < 262143 ? data : DATA_INVALID;
     } else {
-        data = data < 65535 ? data : 0xFFFFFFFF;
+        data = data < 65535 ? data : DATA_INVALID;
     }
-    if (0xFFFFFFFF == data){
+    if (DATA_INVALID == data){
         data=0;
         ErrorCode |= E_DATA;
     }
@@ -77,12 +82,12 @@ uint32_t readFS(uint8_t  interV, uint8_t extS, uint8_t QS){
 // If data is invalid, returns zero plus ErrorCode = E_DATA
 uint32_t readHS(uint8_t interV, uint8_t extS, uint8_t QS){  
     uint32_t data = PBlock.byteD[7 + QS/2 * EtsdInfo.blockIntervals + interV];
-    if (extS) {
+    if (extS--) {
         data += ( readExtS(interV, extS) << 8 ); 
-        data = data < 1023 ? data : 0xFFFFFFFF;
+        data = data < 1023 ? data : DATA_INVALID;
     } else
-        data = data < 1023 ? data : 0xFFFFFFFF;
-    if (0xFFFFFFFF == data){
+        data = data < 1023 ? data : DATA_INVALID;
+    if (DATA_INVALID == data){
         data=0;
         ErrorCode |= E_DATA;
     }
@@ -93,12 +98,12 @@ uint32_t readHS(uint8_t interV, uint8_t extS, uint8_t QS){
 // If data is invalid, returns zero plus ErrorCode = E_DATA
 uint32_t readQS(uint8_t  interV, uint8_t extS, uint8_t QS){  
     uint32_t data = (PBlock.byteD[ 7 + QS*(EtsdInfo.blockIntervals/2) + (interV+1)/2 ]>>((interV&01)*4)) & 15;
-    if (extS){
+    if (extS--){
         data += readExtS(interV, extS) << 4;
-        data = data < 63 ? data : 0xFFFFFFFF;
+        data = data < 63 ? data : DATA_INVALID;
     } else
-        data = data < 15 ? data : 0xFFFFFFFF;
-    if (0xFFFFFFFF == data){
+        data = data < 15 ? data : DATA_INVALID;
+    if (DATA_INVALID == data){
         ErrorCode |= E_DATA;
         data=0;
     }
@@ -121,11 +126,16 @@ uint8_t readXData(uint16_t addr) {
 // If data is invalid, returns zero plus ErrorCode = E_DATA
 int32_t readChan(uint8_t interV, uint8_t chan){
     int32_t data=0;
-    uint8_t lp, extS, extSCh=0, AS=0, relCh=0, reg=0, QS=0;
+    uint8_t lp, AS=0, relCh=0, QS=0, extS=1, reg=1;
 
+    if(!(EtsdInfo.channels)){
+        ErrorCode = E_NO_ETSD;
+        ELog(__func__, 1);
+        exit(1);
+    }
     for(lp=0; lp<chan; lp++) {  //determin counters up to this channel
         if(EXTS_bit(lp))    // Count extended streams
-            extSCh++;
+            extS++;
         if(AUTOSC_bit(lp))  // Count AutoScale streams
             AS++;
         if(CNT_bit(lp))    // Count Counter/Relative streams
@@ -152,53 +162,46 @@ int32_t readChan(uint8_t interV, uint8_t chan){
         */
     }
 
+    ErrorCode &= ~E_DATA;
+
     if (interV) {       
-        if(EXTS_bit(chan)) { // channel uses an extended Stream
-            extS = extSCh;
-        } else {
+        if(!EXTS_bit(chan)) { // channel doesn't use an extended Stream
             extS = 0;       
         }
  
         switch(ETSD_Type(chan)){
             case 10:             // AutoScaling
-                data = readAutoS(lp, AS, QS); 
+                data = readAutoS(interV, AS, QS); 
                 break;
             case 9:     // Extended Full Stream
             case 8:     // Full Stream
-                data = readFS(lp, extS, QS);   
+                data = readFS(interV, extS, QS);   
                 break;
             case 5:     // Extended Half Stream
             case 4:     // Half Stream
-                data = readHS(lp, extS, QS);
+                data = readHS(interV, extS, QS);
                 break;
             case 3:     // Extended Quarter Stream
             case 2:     //  Quarter Stream
-                data = readQS(lp, extS, QS);
+                data = readQS(interV, extS, QS);
                 break;
             case 1:     //  Two bit Stream
-                data = readExtS(lp, extS);
+                data = readExtS(interV, --extS);
                 break;
             default:
-                ErrorCode |= E_CODING | E_DATA;
-         }
-        if(CNT_bit(chan)){
-            if(!ErrorCode&E_DATA){
-                lastReading[chan] += data;
-            }
-        } else if(INT_bit(chan)){
-            if(!ErrorCode&E_DATA){
-//            if(ErrorCode&E_DATA){
-//                data = -2147483648;  // most negative int32_t value
-//            } else {
+                ErrorCode |= (E_ARG | E_DATA);
+        }
+
+        if( !(ErrorCode&E_DATA) ){
+            if(INT_bit(chan)){
                 data = etsdToSigned(2*ETSD_Type(chan), data);
             }
- //       } else {
-        }
-        
+            lastReading[chan] += data;
+        }    
     } else {  // interV = 0, read registers
         if (REG_bit(chan)) {
-            data = readReg(reg);  //pete fix lastreading if E_DATA=ErrorCode
-            if (0xFFFFFFFF == data){
+            data = readReg(reg);  // Pete fix lastreading if E_DATA=ErrorCode
+            if (DATA_INVALID == data){
                 ErrorCode |= E_DATA;
                 data=0;
             } else 
