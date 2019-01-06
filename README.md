@@ -34,8 +34,8 @@ no scaling can handle 0 - ~6.5kW (240V @ ~27A)  zero storage error
 
 Currently supports the following stream sizes:
 <pre>  Type                          Bits   Notes
-   10 = AutoScale               (16)   up to 8 channels are available and automatically allocated (ONLY works with unsigned Ints!!!)     
-    9 = Extended Full Stream    (18)
+   10 = AutoScale               (16)   up to 8 channels are available and automatically allocated      
+    9 = Extended Full Stream    (18)               (Autoscaling ONLY works with unsigned Ints!!!)
     8 = Full Stream             (16)  
     5 = Extended Half Stream    (10)
     4 = Half Stream             (8)
