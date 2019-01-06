@@ -1,7 +1,8 @@
 # ETSD-Time-Series-Database
 A simple and efficient Time-Series database written in C designed for storing sensor data.  Originally designed to store watt-second data at 10 second intervals, but is much more flexible now.
 
-Preliminary upload, not quite ready for use yet.  etsdSave&etsdRead functions seems to work.  You can use etsdCmd to create and examine ETSD files, but recovery and query functions aren't ready/working yet.  
+Preliminary upload, not finished yet, but functional.  etsdSave & etsdRead libraries are working.  You can use etsdCmd to create, examine, and recover ETSD files. Simple queries (Average,Minimum, Maximum and Total) functions work, but total values may start/end before/after the specified times (working on it).  
+The ETSD Data Director(edd) daemon works with the ECM-1240 data collector, I'm currently using it to log data on my system. 
 
 ETSD is designed to offer high reliability, and reduce wear on flash memory drives (SD cards, thumb drives, etc.)
 Each 'Block' of data occupies 1x 512 byte sector on hard drive, thumb drive or SD card.
@@ -30,3 +31,18 @@ no scaling can handle 0 - ~6.5kW (240V @ ~27A)  zero storage error
 4x scaling can handle 26.2kW (240V @ ~109A)     up to 2 watt second error per interval, corrected on next block
 8x scaling can handle 52kW (240V @ ~218 amps)   up to 4 watt second error per interval, corrected on next block
 </pre>
+
+Currently supports the following stream sizes:
+<pre>  Type                          Bits   Notes
+   10 = AutoScale               (16)   up to 8 channels are available and automatically allocated (ONLY works with unsigned Ints!!!)     
+    9 = Extended Full Stream    (18)
+    8 = Full Stream             (16)  
+    5 = Extended Half Stream    (10)
+    4 = Half Stream             (8)
+    3 = Extended Quarter Stream (6)
+    2 = Quarter Stream          (4)
+    1 = Two bit stream          (2)    
+    0 = don't save to ETSD
+ </pre>
+ 
+ Note:  I'm planning on adding 20 bit, 24 bit, and 32 bit streams soon.  In the process I will change 'Autoscaling" from type 10 to type 11
