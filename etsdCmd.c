@@ -15,17 +15,22 @@ Copyright 2018 Peter VanDerWal
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 *********************************************************************************/
-#define _GNU_SOURCE     // needed to keep strcasestr() for throwing an error
+#define _GNU_SOURCE     // needed to keep strcasestr() fROM throwing an error
 
 #include <stdio.h>
 #include <stdint.h>
+#include <inttypes.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <ctype.h>      // for isalnum()
+#include <unistd.h>     //sleep() usleep()
 #include "errorlog.h"
 #include "etsdSave.h"
 #include "etsdRead.h"
 #include "etsdQuery.h"
+
+#define AC_OFFSET 1040
 
 #if BLOCKSIZE==512
 #if MAX_CHANNELS>100
@@ -44,7 +49,9 @@ Copyright 2018 Peter VanDerWal
 #endif
 
 /*
-./etsdCmd create /var/db/garage.tsd /var/db/garage.rrd u=1 T=10s GarageMain:9:E1:r Servers:10:E2:r Fridge_Freezer:8:E5:r AC_Voltage:4:E11:G Water_Heater:8:E6:r TV_Entertainment:8:E7:r Evap_Solar:8:E8:r Mini_Split:8:E9:r
+./etsdCmd create /var/db/garage.tsd /var/db/garage.rrd u=1 T=10s GarageMain:9:E1:r Servers:10:E2:r Fridge_Freezer:8:E5:r AC_Voltage:4:E11:G Water_Heater:8:E7:r TV_Entertainment:8:E6:r Evap_Solar:8:E8:r Mini_Split:8:E9:r
+
+./etsdCmd create /var/db/garage.tsd u=1 T=10s GarageMain:9:E1:r Servers:10:E2:r Fridge_Freezer:8:E5:r AC_Voltage:4:E11:G Water_Heater:8:E7:r TV_Entertainment:8:E6:r Evap_Solar:8:E8:r Mini_Split:8:E9:r
 
 if user specifies an rrd file, then automatically create rrd file, otherwise output rrdtool string that user can edit and/or use to create file
 t= Interval Time [optional]last character S,M,H  for seconds, minutes, hours
@@ -57,7 +64,7 @@ Channel Definitions =  ChanName:StreamType:Source&Channel:  I=Intiger(Signed) : 
 Source&Channel E# = ECM chan #, M# = shared Memory chan #.
 */
 // Must specify new ETSD file, will also create an rrd file if there is an RRD cmd line arguement, otherwise it won't create RRD
-int createETSD(int argc, char *argv[]){
+int32_t createETSD(int argc, char *argv[]){
     FILE *fd;
     uint8_t block[BLOCKSIZE] = {0};
 //    uint8_t *bPtr;
@@ -69,11 +76,13 @@ int createETSD(int argc, char *argv[]){
     uint8_t rraC, channels=0, uID=0, registers=0, cdx=0, gauge, source, destination, *chanMap;
 //pete create help variable
     uint16_t streams = 0, xData=0, intervals=0, intTime=10;
-    int lp, lp2, labelSize=0, idx=3; 
-   // float streams=0.0;
-    
-    strcpy(block, "CfgE");
-    //ptr = labels;
+    int32_t lp, lp2, labelSize=0, idx=3; 
+    union{
+        uint32_t time;
+        char TIME[5];
+    } ht = {ETSD_HEADER}; // Ugly code but it works, Ensures that headers created will match ETSD_HEADER constant defined in etsdSave.h
+    strncpy(block, ht.TIME, 4);  
+    //strcpy(block, "ETSD");  
    
     if (1 < argc) {  // we have command line arguments
 
@@ -221,7 +230,7 @@ int createETSD(int argc, char *argv[]){
         intervals = 127 ;
     }  
     
-    printf(" Saving %d registers | channels = %d | intervals = %d | interval time = %d seconds | bytes per interval = %.2f\n Wasted space = %d bytes.\n\n", registers, channels, intervals, intTime, streams/4.0, (BLOCKSIZE-8-xData-registers*4-(int)(intervals*streams/4+0.75)));
+    printf(" Saving %d registers | channels = %d | intervals = %d | interval time = %d seconds | bytes per interval = %.2f\n Wasted space = %d bytes.\n\n", registers, channels, intervals, intTime, streams/4.0, (BLOCKSIZE-8-xData-registers*4-(int)((intervals*streams+3)/4)));
 
     block[4] = intervals<<7 | channels;  // little endian
     block[5] = uID<<6 | intervals>>1;
@@ -231,6 +240,7 @@ int createETSD(int argc, char *argv[]){
     block[9] = xData;
     
     // Pete test to see if file already exists and prompt user to overwrite
+ 
     if (fd = fopen(etsd, "w")) {
         fwrite(&block, BLOCKSIZE, 1, fd);
         fclose(fd);
@@ -265,8 +275,126 @@ int createETSD(int argc, char *argv[]){
     }
 }
 
+//fName, start= end= output=[input|etsd/raw]
+int32_t queryETSD(int argc, char *argv[]){
+    uint8_t lp, lp2, chan=0, seRel=0;
+ //   uint8_t *chanMap;
+    char *ptr, *ptr2, *cmd;
+    uint32_t start=0, end=0;
+    time_t now=time(NULL);
 
-int examinETSD(int argc, char *argv[]){
+    if (1 < argc) {  // we have command line arguments
+
+        if (etsdInit(argv[2], 1)){
+            fprintf(stderr, "Error: can't open ETSD file %s \n", argv[2] );  // Log Error
+            exit(1);
+        }    
+//        Line=malloc( EtsdInfo.channels*11);
+//        chanMap=malloc(EtsdInfo.channels);
+        for(lp=3; lp< argc; lp++){
+            if(ptr=strchr(argv[lp],'=')){
+                ptr2=ptr;
+                ptr++;
+                switch(*argv[lp]) { // looking at first character of arguement
+                    case 's':
+                    case 'S':
+                        start = etsdParseTime(ptr);
+                        if(strcasestr(ptr,"end")){  // start time relative to end time
+                            if(!end){               // if no end time yet
+                                if(seRel) {         // this means end time was ALSO waiting on start time
+                                    ErrorCode |= E_STARTSTOP;
+                                    ELog(__func__, 0);
+                                    return -1;
+                                }
+                                seRel = 1;
+                            } else {
+                                if( 0 > start) {        // if start is negative
+                                    start = end + start;    // note: start = end - timevalue
+                                    seRel = 0;
+                                } else {                // else start is positive or zero
+                                    ErrorCode |= E_STARTSTOP;
+                                    ELog(__func__, 0);
+                                    return -1;
+                                }
+                            }    
+//                        } else if(strcasestr(ptr,"begin")){  
+//                            start = etsdTimeS(1);
+                        } else if(strcasestr(ptr,"start")){  //  Error Invalid, start can't be relative to start
+                            ErrorCode |= E_STARTSTOP;
+                            ELog(__func__, 0);
+                            return -1;
+                        } else {
+                            if(seRel)
+                                end = start + end;
+                        }
+                        break;
+                    case 'e':
+                    case 'E':
+                        end = etsdParseTime(ptr);
+                        if(strcasestr(ptr,"start")){
+                            if(!start) {
+                                if(seRel) {         // this means start time was ALSO waiting on end time
+                                    ErrorCode |= E_STARTSTOP;
+                                    ELog(__func__, 0);
+                                    return -1;
+                                }
+                                seRel = 1;
+                            }else{
+                                if( 0 < end) {        // if end is postive
+                                    end = start + end;  // note: end = start + timevalue
+                                    seRel = 0;
+                                } else {                // else start is negative or zero
+                                    ErrorCode |= E_STARTSTOP;
+                                    ELog(__func__, 0);
+                                    return -1;                                
+                                }
+                            }   
+                        } else if(strcasestr(ptr,"end")){  //  Error Invalid, end can't be relative to end
+                            ErrorCode |= E_STARTSTOP;
+                            ELog(__func__, 0);
+                            return -1;
+                        } else {
+                            if(seRel)
+                                start = start + end;
+                        }
+                        break;
+                    case 'c':
+                    case 'C':
+                        if(!(chan=atoi(ptr))){
+                            if (255==(chan=etsdChanNum(ptr)) ){
+                                printf("Invalid channel name or number Chan=%s\n",ptr);
+                                exit(1);
+                            }
+                        }
+                        // Pete add code for selective channel output
+                        break;
+                    case 'q':
+                    case 'Q':
+                        cmd=ptr;
+                        break;
+                }
+            }
+        }
+
+        
+        // done with argv, dump file
+        if(!end || end>now)
+            end=now;        
+        if(!start){
+            start==etsdTimeS(1);
+            ELog(__func__, 1);
+        }
+        printf("Query result = %" PRId64 " \n", etsdAMT(cmd, chan, start, end));
+    } else {
+        printf(" The 'Query' command requires at least the name of the ETSD to dump, Q=Type(tot/ave/min/max), C=Channel name/number\n");
+        printf("        S[tart]=<start time> and E[nd]=<end time>\n ");
+        printf(" Example: etsdCmd query /path/to/file.tsd q=ave c=5 s=now-4h e=now\n");
+        printf("          etsdCmd dump /path/to/file.tsd Channel=Main Query=Total Start=midnight-4days End=midnight+3h\n");
+    }
+
+}
+
+int32_t examinETSD(int argc, char *argv[]){
     uint8_t lp, reg=0;
     char sType[10];
     if (etsdInit(argv[2], 1)){
@@ -275,8 +403,8 @@ int examinETSD(int argc, char *argv[]){
         exit(1);
     }
 
-    printf("\n  Channel                  Source     Stream    Counter    Save   Save to \n");
-    printf ( " #   Name                type  Chan    Type     /Guage   Register   RRD? \n\n");
+    printf("\n  Channel                  Source     Stream    Counter    Save   Save to  Save As\n");
+    printf ( " #   Name                type  Chan    Type     /Guage   Register   RRD?   Integer?\n\n");
     for (lp=0;lp<EtsdInfo.channels;lp++){
         switch(ETSD_Type(lp)){
             case 10:
@@ -304,7 +432,7 @@ int examinETSD(int argc, char *argv[]){
                 sprintf(sType,"2 Bits");
                 break;
         }
-        printf("%2d %-20s  %s   %2u    %-9s  %-7s     %c        %c \n", lp+1, EtsdInfo.label[lp], SRC_TYPE(lp)?"SHM":"ECM", SRC_CHAN(lp), sType, CNT_bit(lp)?"Counter":"Guage", REG_bit(lp)?'Y':'N', RRD_bit(lp)?'Y':'N');
+        printf("%2d %-20s  %s   %2u    %-9s  %-7s     %c        %c        %c\n", lp, EtsdInfo.label[lp], SRC_TYPE(lp)?"SHM":"ECM", SRC_CHAN(lp), sType, CNT_bit(lp)?"Counter":"Guage", REG_bit(lp)?'Y':'N', RRD_bit(lp)?'Y':'N', INT_bit(lp)?'Y':'N');
         if (REG_bit(lp))
             reg++;
     }
@@ -316,8 +444,10 @@ int examinETSD(int argc, char *argv[]){
 // main arguements Create Examin RecoverRRD
 int main(int argc, char *argv[]){
     char *rrd, *nada, *ptr, **argp;
+    char inp[20];
     int argpc;
-    
+    FILE *fd;
+    LogLvl=5;
     if (1 < argc) {  // we have command line arguments
         if (!strcasestr(argv[2], ".tsd")) { 
             fprintf(stderr,"Error: second argument MUST be a ETSD file with a .tsd extention.\n You entered = %s.\n", argv[2]);
@@ -330,6 +460,10 @@ int main(int argc, char *argv[]){
             case 'C':
                 createETSD(argc, argv);
                 break;
+            case 'q':
+            case 'Q':
+                queryETSD(argc, argv);
+                break;
             case 'e':
             case 'E':
                 examinETSD(argc, argv);
@@ -341,7 +475,7 @@ int main(int argc, char *argv[]){
                     exit(1);
                 }
                 rrd=argv[3];
-                if (strcasestr(rrd, ".rrd")){
+                if ( strcasestr(rrd, ".rrd") || strcasestr(rrd, ".txt") ){
                     argp=argv+4;
                     argpc=argc-4;
                 } else {
@@ -357,7 +491,18 @@ int main(int argc, char *argv[]){
                     argp=argv+3;
                     argpc=argc-3;
                 }
-                recoverRRD(argpc, argp, rrd);
+                if (fd = fopen(rrd, "r")) { //test to see if file already exists
+                    fclose(fd);
+                    printf("File %s already exists.  Can't restore to an existing file.\nDelete existing file(y/n)? ", rrd);
+                    scanf("%s",&inp);
+                    if(strchr(inp,'y') || strchr(inp,'Y')){
+
+                    } else {
+                        exit(0);
+                    }
+                    
+                }
+                recoverRRD(argpc, argp, rrd, 1);
                 break;
         }
     
