@@ -45,4 +45,4 @@ Currently supports the following stream sizes:
     0 = don't save to ETSD
  </pre>
  
- Note:  I'm planning on adding 20 bit, 24 bit, and 32 bit streams soon.  In the process I will change 'Autoscaling" from type 10 to type 11
+ Note:  I'm planning on adding 20 bit, 24 bit, and 32 bit streams soon. 
