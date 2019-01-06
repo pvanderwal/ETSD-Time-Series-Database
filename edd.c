@@ -75,8 +75,8 @@ void savepid (char *file, pid_t pId){
 // if interV = 0, save registers (if applicable)
 // pete note:  call on start up after RX first reading from ECM and before interval 1, on last blockinterval, commit, clear etsd, 
 // call with interV = 0 at beging of each block to save registers and reset 'relative' value arrays.
-void saveData(uint8_t interV, uint8_t ecmInvalid){
-    uint8_t lp, lp2, goodUpdate, missed, dataInvalid, extS,  relCh=0, reg=0, extSCh=0, AS=0, FS=0, HS=0;
+void saveData(uint8_t interV, int8_t dataInvalid){
+    uint8_t lp, lp2, goodUpdate, missed, extS,  relCh=0, reg=0, extSCh=0, AS=0, FS=0, HS=0;
     uint32_t newData;
 #ifndef NO_RRD
 //    char rrdValues[EtsdInfo.rrdCnt + 1][12];
@@ -89,25 +89,17 @@ void saveData(uint8_t interV, uint8_t ecmInvalid){
     
 //    check ecm
     for (lp=0; lp<EtsdInfo.channels; lp++){
-        if (SRC_ECM(lp)) {    // source type = ecmR
-            if(ecmInvalid){
-                dataInvalid = 1;
-                newData = 0xffffffff;
-            } else {
+        if (SRC_PRIMARY(lp)) {    // source type = ecmR
+            if(!dataInvalid){           // Pete need to update if using something other than ECM-1240 as primary
                 if (10 > SRC_CHAN(lp)){
                     newData = ecmGetCh(SRC_CHAN(lp));
                 } else {
                     newData = ecmGetVolt(SRC_CHAN(lp) - 10);
                 }
-                dataInvalid = 0;
             }
         } else if (SRC_SHM(lp)) {  // source type = SHM    
-            if (0 < shmRead(SRC_CHAN(lp), 13, &newData))    // if SHM data is valid
-                dataInvalid = 0;
-            else {  // data is invalid
-                dataInvalid = 1;
-                newData = 0xffffffff;
-            }
+            dataInvalid = shmRead(SRC_CHAN(lp), 13, &newData);
+            dataInvalid = 0>dataInvalid?1:0;
         } // Pete add "other sources" here
 #ifndef NO_RRD  
         if(RRD_bit(lp)) {     // save channel to rrd
@@ -123,7 +115,7 @@ void saveData(uint8_t interV, uint8_t ecmInvalid){
         // Save to ETSD
 //pete  LogBlock(&dataU->byteD, "ECM", 64);
         if(ETSD_Type(lp)){    // save channel to etsd
-            if (6>ETSD_Type(lp)&&9<SRC_CHAN(lp)){  // saving ecm voltage to 1/2 or 1/4 stream, need to reduce data to fit
+            if (SRC_PRIMARY(lp) && 6>ETSD_Type(lp) && 9<SRC_CHAN(lp)){  // Pete if using a different source than ECM-1240, probably need to remove this section.
                 if ( 11 == SRC_CHAN(lp)){      //ECM AC Voltage
                     if (newData) {                 // zero = power outage during interval
                         if (newData < AC_OFFSET)
@@ -140,6 +132,7 @@ void saveData(uint8_t interV, uint8_t ecmInvalid){
                     newData = AUX5_DC;
                 }
             }
+            
             saveChan(interV, lp, dataInvalid, newData);
         }
     }
@@ -309,13 +302,12 @@ int main(int argc, char *argv[])  {
         EcmShmAddr = "";
     }
     ecmSetup(TTYPort, EcmShmAddr);
-    ELog(__func__, 1);      //log any errors and zero ErrorCode
+    ELog("Main Clear Errors", 1);      //log any errors and zero ErrorCode
       
     while (4>ecmR(10, 0));  // Clear out any data in buffers
     while (ecmR(110, 0));   // wait for good data, 110 = 11 second 
 
     while (1) {
-        ELog(__func__, 1);  //log any errors and zero ErrorCode
 
         if(!Interval) {
             etsdBlockClear(0xffff); // by default 0xffff indicates invalid value
@@ -324,7 +316,12 @@ int main(int argc, char *argv[])  {
         }
         Interval++;
         sleep(sleepTime);
-        chkErr = ecmR(checkTime, Interval); 
+        chkErr = ecmR(checkTime, Interval);
+        if(chkErr)
+            Log("Main loop chkErr #%d\n", chkErr);
+        ELog("Main after EcmR", 1);  //log any errors and zero ErrorCode
+        if (LogLvl>3)
+            LogBlock(&dataU->byteD, "ECM", 64);
         sleep(1); // give external programs time to update SHM data before storing it  
         saveData(Interval, chkErr);
 //Log("main() Interval = %d and blockIntervals = %d\n", Interval, EtsdInfo.blockIntervals);
@@ -334,7 +331,7 @@ int main(int argc, char *argv[])  {
                     Log("<5> About to write the following to the ETSD file: %s\n", EtsdInfo.fileName);
                     LogBlock(&PBlock.byteD, "ETSD", 512);
                 }
-                if( etsdCommit(Interval-1) )
+                if( etsdCommit(Interval) )
                     ELog(__func__, 1);  
             }
             Interval = 0;
