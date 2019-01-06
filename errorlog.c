@@ -65,7 +65,9 @@ void ELog(const char *cfnm, uint8_t clear){
         "Unknown error",
         "Requested file is not an ETSD file",
         "Device specified is not a TTY device",
-        "Unknown error",
+        "Excessive RRD errors, aborting",
+        "Unknown Error", 
+        "Unknown Error", 
         "Can't get status of tty device",
         "Can't open/create shared memory object",
         "Can't open file for writing",
@@ -73,8 +75,9 @@ void ELog(const char *cfnm, uint8_t clear){
         "Error seeking sector",
         "Check Sum error",
         "Timed out waiting on serial data",
-        "Unknown Error", "Unknown Error", "Unknown Error", "Unknown Error", "Unknown Error", "Unknown Error", 
-        "Unknown Error", "Unknown Error", "Unknown Error", "Unknown Error", "Unknown Error", 
+        "Can't delete/overwrite file", 
+        " ETSD database not initialized",
+        "Unknown Error", "Unknown Error", "Unknown Error", "Unknown Error", "Unknown Error", "Unknown Error", "Unknown Error", 
         "Unspecified coding error"
         };
 
@@ -84,14 +87,15 @@ void ELog(const char *cfnm, uint8_t clear){
             idx=10;
         }
         while(eCode){
-            if(eCode&1)
-                if(9<idx) { // '<5>Notice' level errors are bits 0-9
-                    if(12<idx)
-                        eLvl=5; // '<3>Error' is bits 13-31
+            if(eCode&1){
+                if(9<idx) { // '<5>Notice' are levels 0-9
+                    if(14<idx)
+                        eLvl=5; // '<3>Error' is levels 15-31
                     else        
-                        eLvl=4;  // '<4>Warning' is levels bits 10-12
+                        eLvl=4;  // '<4>Warning' is levels 10-14
                 } 
                 Log("%s: %s %s \n", errLvl[eLvl], cfnm, summary[idx]);
+            }
             eCode >>= 1;
             idx++;
         }
