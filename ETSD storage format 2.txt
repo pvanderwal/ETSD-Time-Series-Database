@@ -5,7 +5,7 @@ Note: A 'Channel' is the source of the data, a 'Stream' is the data coming from 
 Header for Data Blocks
     4 bytes    Epoch time at start of page (time when first ECM packet received)
     2 bytes    MSb x2 = user ID | 7 bits =  Total intervals | 7 bits = Valid intervals    Note:  Unit Unique ID (UUID) = first 9 bits
-    2 bytes    Auto-Scaling(default) for up to 8 Channels, 2 bits per Channel 1,2,4,8x  (if not using autoscale can be retasked by user)
+    2 bytes    Auto-Scaling(default) for up to 7 Channels, 2 bits per Channel 1,2,4,8x  
                         Note: 	Autoscaling can handle values up to 524,287 (with a small storage error)
 
 This leaves 504 bytes  for data 
@@ -34,24 +34,23 @@ The first block of each etsd file contains configuration data that maps Source C
     2 = Quarter Stream          (4)
     1 = Two bit stream          (2)
     
-    0 = don't save to ETSD
-
-The following types are not currently supported but might be added in a future version
-   Double Stream    			32 bits                
-   Large Stream     			24 bits      
+The following types are supported but untested
+   13 = Double Stream           (32) bits   Full+Full             
+   12 = 24bit Stream            (24) bits   Full+Half
+   11 = 20bit stream            (20) bits   Full+Quarter
+   
+The following types are not currently supported but might be added in a future version   
    Single Precision floating point  	32 bits  
    1/2 Precision floating point     	16 bits 
    	See https://en.wikipedia.org/wiki/Half-precision_floating-point_format 
 	    for limitations on 1/2 precision floatsPlanned enhancements
 Planned enhancements
     support signed integers (almost ready)
-    Add 32bit signed & unsigned int streams
     Add 1/2 precision floating point support (especially ARM version)
     Add single precision floating point support
 Possible     enhancements
     optional 1024 byte blocks
     optional extended headers for 512byte blocks 
-    24 bit streams, plus extended?
 Maybe in version 2
     use 1024 or 2048 byte blocks instead of 512
         this would allow more than 100 channels, potentially up to 255?
