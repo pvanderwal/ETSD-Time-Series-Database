@@ -33,6 +33,7 @@ Copyright 2018 Peter VanDerWal
 #endif
 
 #include "ecmR.h"
+#include "etsd.h"
 #include "etsdSave.h"
 #include "errorlog.h"
 
@@ -132,7 +133,6 @@ void saveData(uint8_t interV, int8_t dataInvalid){
                     newData = AUX5_DC;
                 }
             }
-            
             saveChan(interV, lp, dataInvalid, newData);
         }
     }
@@ -200,7 +200,7 @@ void readConfig( char *fileName) {
 
 
 int main(int argc, char *argv[])  {
-    uint_fast8_t lp, chkErr=0;
+    uint_fast8_t lp, chkErr=0, ecm_reset=1, shm_reset=1;
 #define sleepTime 8     // Note: there is an additional 1 second used to synchronize SHM data
 #define checkTime 30    // in 1/10 second increments so 30 = 3 seconds
     
@@ -272,7 +272,7 @@ int main(int argc, char *argv[])  {
 #else
         Log("<5> %s starting up with the following settings:\n  TTYPort = %s \n   EtsdFile = %s \n  logLevel = %d\n", argv[0], TTYPort, EtsdInfo.fileName, LogLvl);
 #endif
-        Log("<5> The unit ID is %d, %d channels with %d Intervals per Block \n", (EtsdInfo.header)>>12, EtsdInfo.channels, EtsdInfo.blockIntervals );
+        Log("<5> The unit ID is %d, %d channels with %d Intervals per Block \n", (EtsdInfo.header)>>14, EtsdInfo.channels, EtsdInfo.blockIntervals );
     }
 #ifdef DAEMON    
     process_id = fork(); // Create child process
@@ -304,15 +304,20 @@ int main(int argc, char *argv[])  {
     ecmSetup(TTYPort, EcmShmAddr);
     ELog("Main Clear Errors", 1);      //log any errors and zero ErrorCode
       
-    while (4>ecmR(10, 0));  // Clear out any data in buffers
+    while (4>ecmR(10, 0));  // Clear out any data in buffers, on a restart may result in a ECM timed out error (not a problem)
     while (ecmR(110, 0));   // wait for good data, 110 = 11 second 
 
     while (1) {
-
         if(!Interval) {
             etsdBlockClear(0xffff); // by default 0xffff indicates invalid value
             etsdBlockStart();  
+            if(ecm_reset)
+                SRC_RESET(0);
+            if(shm_reset)
+                SRC_RESET(1);
             saveData(0, chkErr);  // save registers
+            shm_reset=0;
+            ecm_reset=0;
         }
         Interval++;
         sleep(sleepTime);
@@ -320,20 +325,22 @@ int main(int argc, char *argv[])  {
         if(chkErr)
             Log("Main loop chkErr #%d\n", chkErr);
         ELog("Main after EcmR", 1);  //log any errors and zero ErrorCode
-        if (LogLvl>3)
-            LogBlock(&dataU->byteD, "ECM", 64);
-        sleep(1); // give external programs time to update SHM data before storing it  
-        saveData(Interval, chkErr);
+        if(ecmGetVolt(1)){  // test to see if ECM was reset.  If not save data.  
+            if (LogLvl>3)
+                LogBlock(&dataU->byteD, "ECM", 64);
+            sleep(1); // give external programs time to update SHM data before storing it  
+            saveData(Interval, chkErr);
+        } else { // if AC voltage = 0 then ECM was reset
+            Interval=etsdSrcReset(0, Interval-1);
+        }
 //Log("main() Interval = %d and blockIntervals = %d\n", Interval, EtsdInfo.blockIntervals);
         if ( Interval == EtsdInfo.blockIntervals ) {
-            if (EtsdInfo.fileName != NULL){
-                if (LogLvl > 2) {
-                    Log("<5> About to write the following to the ETSD file: %s\n", EtsdInfo.fileName);
-                    LogBlock(&PBlock.byteD, "ETSD", 512);
-                }
-                if( etsdCommit(Interval) )
-                    ELog(__func__, 1);  
+            if (LogLvl > 2) {
+                Log("<5> About to write the following to the ETSD file: %s\n", EtsdInfo.fileName);
+                LogBlock(&PBlock.byteD, "ETSD", 512);
             }
+            if( etsdCommit(Interval) )
+                ELog(__func__, 1);  
             Interval = 0;
         }        
     }
