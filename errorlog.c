@@ -135,13 +135,17 @@ void Log(const char *format, ...){
 // Logs an array of data in hex format, 16 bytes per line
 // "type" is a short (<5 char) description, size is the array size.
 void LogBlock(void *ptr, char *type, uint16_t size){
-    char scratch[70], sblock[2000];
-    uint8_t lp, lp2, *array = (uint8_t*)ptr; 
-    uint16_t addr=0;
-    
-    sprintf(sblock, "<6> %4s block", type);
+    char scratch[8], sblock[2700], *array = (char*)ptr;
+    uint8_t lp, lp2; 
+    uint16_t addr=0, len;
+    if(strlen(type)){
+        sprintf(sblock, "<6> %.4s block", type);
+    } else {
+//         sprintf(sblock, "");
+        sblock[0]='\0';
+    }
     for (lp=0; lp < (size+15)/16; lp++){
-        sprintf(scratch, "\n[%2d] ", lp);
+        sprintf(scratch, "\n[%03X] ", lp*16);  
         strcat(sblock, scratch);
         for (lp2=0; lp2<16; lp2++){
             if (lp*16+lp2 > size)
@@ -152,6 +156,25 @@ void LogBlock(void *ptr, char *type, uint16_t size){
             if (7==lp2)
                 strcat(sblock, "| ");
         }
+        strcat(sblock, "    ");
+        len=strlen(sblock);
+        //len = lp*80+60;
+        for (lp2=0; lp2<16; lp2++){
+            char val=array[lp*16+lp2];
+            if ((uint8_t)(val-32) < 95){
+                sblock[len]=val;
+                if(37==val)
+                    sblock[++len]=37;       // have to escape % by printing it twice or it causes problems with Log()
+            }else{ 
+                sblock[len]='.';
+            }
+            if (7==lp2){
+                sblock[++len]=' ';
+                sblock[++len]='|';
+                sblock[++len]=' ';
+            }
+            sblock[++len]='\0';
+        }        
     }
     strcat(sblock,"\n");
     Log(sblock);
