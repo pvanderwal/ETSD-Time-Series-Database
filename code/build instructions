@@ -1,0 +1,41 @@
+//build errorlog shared library
+gcc errorlog.c -c -fpic
+gcc *.o -shared -o /usr/local/lib/libelog.so
+rm *.o
+
+//build eshm shared library is using
+gcc eshm.c -lelog -c -fpic
+gcc *.o -shared -o /usr/local/lib/libeshm.so
+rm *.o
+
+//build etsd base shared library
+gcc etsd.c -lelog -c -fpic
+gcc *.o -shared -o /usr/local/lib/libetsd.so
+rm *.o
+
+//build etsdsave shared library
+gcc etsdSave.c -lelog -letsd -c -fpic
+gcc *.o -shared -o /usr/local/lib/libetsdSave.so
+rm *.o
+
+//build etsdread shared library
+gcc etsdRead.c -letsd -lelog -c -fpic
+gcc *.o -shared -o /usr/local/lib/libetsdRead.so
+rm *.o
+
+//build etsdQ shared library
+gcc etsdQuery.c -letsd -letsdRead -lelog -lrrd -c -fpic
+gcc *.o -shared -o /usr/local/lib/libetsdQ.so
+rm *.o
+
+// build etsdCmd
+gcc -o etsdCmd etsdCmd.c -lelog -letsd -letsdRead -letsdQ -lrrd
+
+//build edd
+gcc -o edd edd.c -lelog -lecmR -leshm -letsdSave -letsd -lrrd -lrt  
+
+// update ldconfig cache
+ldconfig
+
+
+./etsdCmd dump /var/db/garage.tsd s=1546304763 e=1546305363 o=e
