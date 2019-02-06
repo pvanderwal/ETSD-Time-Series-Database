@@ -3,7 +3,13 @@ gcc errorlog.c -c -fpic
 gcc *.o -shared -o /usr/local/lib/libelog.so
 rm *.o
 
-//build eshm shared library is using
+//build ecmR plugin
+//gcc ecmR.c -lelog -c -fpic
+gcc edsECM.c -lelog -c -fpic
+gcc *.o -shared -o -Wl,libelog.so /usr/local/lib/libedsECM.so
+rm *.o
+
+//build eshm plugin
 gcc eshm.c -lelog -c -fpic
 gcc *.o -shared -o /usr/local/lib/libeshm.so
 rm *.o
@@ -16,6 +22,11 @@ rm *.o
 //build etsdsave shared library
 gcc etsdSave.c -lelog -letsd -c -fpic
 gcc *.o -shared -o /usr/local/lib/libetsdSave.so
+rm *.o
+
+//build edbRRD plugin
+gcc edbRRD.c -lelog -lrrd -c -fpic
+gcc -shared -Wl,/usr/lib/arm-linux-gnueabihf/librrd.so -o /usr/local/lib/libedbRRD.so *.o
 rm *.o
 
 //build etsdread shared library
@@ -32,10 +43,11 @@ rm *.o
 gcc -o etsdCmd etsdCmd.c -lelog -letsd -letsdRead -letsdQ -lrrd
 
 //build edd
-gcc -o edd edd.c -lelog -lecmR -leshm -letsdSave -letsd -lrrd -lrt  
+//gcc -o edd edd.c -lelog -lecmR -leshm -letsdSave -letsd -lrrd -lrt  
+gcc -o edd edd.c -lelog -letsdSave -letsd -lrt -ldl
+
+/usr/local/sbin/edD 
+
 
 // update ldconfig cache
 ldconfig
-
-
-./etsdCmd dump /var/db/garage.tsd s=1546304763 e=1546305363 o=e
