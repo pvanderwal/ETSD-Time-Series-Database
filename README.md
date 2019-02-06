@@ -1,19 +1,18 @@
 # ETSD-Time-Series-Database
-A simple and efficient Time-Series database written in C designed for storing sensor data.  Originally designed to store watt-second data at 10 second intervals, but is much more flexible now.
+A simple and efficient Time-Series database written in C designed for storing/IOT sensor data.  Originally designed to store watt-second data at 10 second intervals, but is much more flexible now.
 
-Preliminary upload, not finished yet, but functional.  etsdSave & etsdRead libraries are working.  You can use etsdCmd to create, examine, and recover ETSD files. Simple queries (Average,Minimum, Maximum and Total) functions work, but total values may start/end before/after the specified times (working on it).  
-The ETSD Data Director(edd) daemon works with the ECM-1240 data collector, I'm currently using it to log data on my system. 
+Updated to use 'plugin' shared objects for data sources (up to 4 separate source plugins), external database, and source for "extra data".  See plugin_api.txt for details.
 
-ETSD is designed to offer high reliability, and reduce wear on flash memory drives (SD cards, thumb drives, etc.)
-Each 'Block' of data occupies 1x 512 byte sector on hard drive, thumb drive or SD card.
-Each Block is self contained, so even if directory table is damaged you might be able to recover data by scanning Sectors.
-
-Each block is only writen once which should reduce wear on flash memory drives.
+ETSD is designed to offer high reliability and reduce wear on flash memory drives (SD cards, thumb drives, etc.)
+Each 'Block' of data occupies 1x 512 byte sector on hard drive, thumb drive or SD card.  
+Data blocks are only writen once and never changed by ETSD, this should reduce wear on flash memory drives.
+Each Block is individually time stamped and self contained, so even if directory table is damaged, if the drive is still readable you should be able to recover database by scanning Sectors.
 
 Note: A 'Channel' is the source of the data, a 'Stream' is the data coming from the Channel
 
 Supports 1 - 100 streams of data in any combination of FullStreams(FS) 16 bits per interval, HalfStreams(HS)8 bits, or QuarterStreams(QS) 4 bits.  Additionally any stream can be extended by 2 additional bits.
-However, storage efficiency is poor if using less than 4 fullstreams.
+Note: storage efficiency is poor if using less than 4 fullstreams.
+
 1024/2048 byte blocks could be supported in the future and would allow up to 127 channels.
 
 To improve long term accuracy, at the begining of each block you can also store a 32 bit value (counter) for any or all channels.
