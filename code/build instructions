@@ -4,7 +4,6 @@ gcc *.o -shared -o /usr/local/lib/libelog.so
 rm *.o
 
 //build ecmR plugin
-//gcc ecmR.c -lelog -c -fpic
 gcc edsECM.c -lelog -c -fpic
 gcc *.o -shared -o -Wl,libelog.so /usr/local/lib/libedsECM.so
 rm *.o
@@ -25,6 +24,7 @@ gcc *.o -shared -o /usr/local/lib/libetsdSave.so
 rm *.o
 
 //build edbRRD plugin
+// Note: update '/usr/lib/arm-linux-gnueabihf/librrd.so' to point to actual location of librrd.so on your system
 gcc edbRRD.c -lelog -lrrd -c -fpic
 gcc -shared -Wl,/usr/lib/arm-linux-gnueabihf/librrd.so -o /usr/local/lib/libedbRRD.so *.o
 rm *.o
