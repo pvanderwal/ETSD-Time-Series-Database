@@ -91,7 +91,6 @@ uint16_t readConfig( char *fileName, int8_t *sCnt, uint16_t *checkTime, uint8_t 
         exit(1);
     }
     
-    ReadLock=NULL;
     *saveEDB=0;
 //printf("Config file %s\n", fileName);
     while ( fscanf(fptr,"%[^\n]\n", configLine) != EOF){
