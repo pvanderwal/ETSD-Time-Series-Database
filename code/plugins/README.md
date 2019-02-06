@@ -60,7 +60,7 @@ uint8_t xdSetup (char *dataArray, char *config, uint8_t cnt)
       //cnt = numer of bytes available
 
 // locks data once per interval just before writing data to ETSD
-void xdReadLock(uint8_t lockData)  
+void xdLock(uint8_t lockData)  
     //called with lockData = 1 approx one second before data is stored at end of ETSD block, 
     //called again with lockData = 0 just before block commit
      //dataArray should only be changed when lockData=0 or while xdReadLock() is active
