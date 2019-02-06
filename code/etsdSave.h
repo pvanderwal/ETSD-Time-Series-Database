@@ -61,7 +61,7 @@ uint8_t etsdReadByte(uint16_t addr);
 // valid chan = 0 thru (EtsdInfo.channels-1)
 // call with interV = 0 to save registers and reset counter variables.
 // call with interV > 0 to save data as either Relative or Absolute based on header block info.
-void saveChan(uint8_t interV, uint8_t chan, uint8_t dataInvalid, int data);
+void saveChan(uint8_t interV, uint8_t chan, uint8_t dataInvalid, uint32_t data);
 
 #ifdef ALL_SYMBOLS
 // reg = 1-??,  registers are saved at the end of Block, working backwards
@@ -110,4 +110,3 @@ void saveExtS(uint8_t interV, uint8_t extS, uint8_t dummy, uint32_t data);
 #endif
 
 #endif
-
