@@ -34,7 +34,7 @@ extern "C" {
 #define E_STARTSTOP      32     // Invalid start/stop time
 #define E_DATE           64     // Invalid date format
 #define E_ARG           128     // Invalid arguement
-//#define E_UNK           256  
+#define E_SRC_RESET     256     // Data source reset
 //#define E_UNK           512  
 #define E_NOT_ETSD     1024     // File header block(0) not from ETSD file
 #define E_NOT_TTY      2048     // Device specified is not a TTY device
