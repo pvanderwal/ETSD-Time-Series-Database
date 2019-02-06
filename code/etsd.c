@@ -1,5 +1,5 @@
 /*************************************************************************
- etsd base library with common functions used throughout the ETSD time series database 
+ etsd.c base library with common functions used throughout the ETSD time series database 
 
 Copyright 2018 Peter VanDerWal 
     This program is free software: you can redistribute it and/or modify
@@ -20,7 +20,6 @@ Copyright 2018 Peter VanDerWal
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-//#include <signal.h>
 
 #include "etsd.h"
 #include "errorlog.h"
@@ -30,20 +29,22 @@ ETSD_INFO EtsdInfo;
 uint32_t *lastReading;
 uint8_t *missedUpdate;
 
-// send 'kill -SIGUSR1 <process id>' to rotate ETSD File
-/*volatile sig_atomic_t RotateEtsd;
+// send 'kill -SIGUSR1 <process id>' to rotate ETSD File at the end of the current block (when saving data)
+// send 'kill -SIGUSR2 <process id>' to reload configuration file after current 'interval'
+volatile sig_atomic_t RotateEtsd;
 
 void etsdSigHandler(int signum) {
     RotateEtsd = 1;
 }
-*/
+
+
 // etsdInit returns zero on success or -1 on error  See errorlog.h for error codes. 
 int32_t etsdInit(char *fName, uint8_t loadLabels) {
     //float streams=0.0;
     uint16_t lp, idx=0, streams=0;
     int8_t error, extSCnt=0;
 
-//    signal(SIGUSR1, etsdSigHandler);   // Rotate etsd file on signal from user app
+    signal(SIGUSR1, etsdSigHandler);   // Rotate etsd file on signal from user app
     
     EtsdInfo.fileName = (char*) malloc(strlen(fName)+1);
     strcpy(EtsdInfo.fileName,fName); 
@@ -61,7 +62,7 @@ int32_t etsdInit(char *fName, uint8_t loadLabels) {
     EtsdInfo.channels = PBlock.data[2] & 127;    // etsd ver 1.0 supports 127 channels max
     EtsdInfo.intervalTime = PBlock.data[3];     // ~18.2 hours maximum interval.
     EtsdInfo.labelSize = PBlock.byteD[8];
-    EtsdInfo.dataBytes = PBlock.byteD[9];
+    EtsdInfo.xData = PBlock.byteD[9];
     
     EtsdInfo.source=(uint8_t*)malloc(EtsdInfo.channels);
     EtsdInfo.destination=(uint8_t*)malloc(EtsdInfo.channels);
@@ -89,8 +90,8 @@ int32_t etsdInit(char *fName, uint8_t loadLabels) {
                 EtsdInfo.registers++;
             }
         }
-        if (RRD_bit(lp)){  // If saving to RRD
-            EtsdInfo.rrdCnt++;
+        if (EXT_DB_bit(lp)){  // If saving to RRD
+            EtsdInfo.extDBcnt++;
         }
     }
     if (loadLabels) {
@@ -106,7 +107,7 @@ int32_t etsdInit(char *fName, uint8_t loadLabels) {
     }
 
     EtsdInfo.extStart = 8.75 + EtsdInfo.blockIntervals * streams/4.0; 
-    EtsdInfo.dataStart =  EtsdInfo.extStart + extSCnt/4.0 + 0.75;
+    EtsdInfo.xDataStart =  EtsdInfo.extStart + extSCnt/4.0 + 0.75;
 //    etsdBlockClear(0xFFFF);
 
 // initialize lastReading and missedUpdate arrays
