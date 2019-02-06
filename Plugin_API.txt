@@ -1,0 +1,57 @@
+ETSD Data Source plugin API for ETSD Data Director (edd)
+ // Note: up to 4 simultaneous source plugins supported
+
+// Functions are not required to use variables pass to them
+// Each source plugin MUST contain at least the following functions:
+
+// edsSetup is only called during initial configuration of edd
+uint8_t edsSetup(char *srcPort, char *Config, uint8_t LogData)
+    // source port (tty, tcp, ext), and passthrough 'Config' read in from etsd.Conf
+    // returns false on success, true on failure
+
+//check for new data. Runs once per interval.  Intended to prepare data for esdReadChan()
+uint8_t edsCheckData(uint16_t timeOut, uint8_t interV)
+    //timeOut is in 1/10 of a second, function can return sooner, but MUST return by end of timeOut.
+    //returns 0 = rx good data, 1 = checksum/CRC error, 2=source reset, 5 = timed out no data, 9 = unspecified error, 128=updating 
+
+//runs once per interval shortly after esdCheckData()
+uint32_t edsReadChan (uint8_t chan, uint8_t interV) 
+  //returns data
+  //note: function not required to use interV for anything
+
+// uint8_t edsCheckReset ()  returns true when source was reset or false=no reset.  Refers to most recent edsCheck
+
+=============================================================================================================================================
+External Database plugin API  
+  // edd supports 1 external database plugin.  Can be setup to simultaneously store data to both ETSD and external database
+  
+// edbSetup is only called during initial configuration of edd
+uint8_t edbSetup (char *DBfileName, char *Config, uint8_t chanCnt, char *chanNames[], uint8_t totInterv, uint8_t LogData)
+    // returns false on success, true on failure  
+    // *Config is a passthrough string read in from etsd.Conf
+    // totInterv is the Total Intervals per block
+    // if LogData=1 then it's intended that the plugin logs data ?? 
+        
+// called once per interval if saving to external db 
+uint8_t edbSave(uint8_t elements, uint32_t *dataArray, *uint8_t status, uint8_t interval);   
+    // *dataArray channel data per interval(0xFFFFFFFF = invalid data), in the same order as *chanNames above
+    // *status array is the status of the datasource that provides channel data, matches *dataArray per channel
+        // 0 = ok, 1 = data invalid, 2=source plugin reset
+        // returns zero on success, any other value indicates some kind of failure
+
+=============================================================================================================================================
+
+External Data  API
+    //Note: ETSD supports including a limited amount of external data that is saved once per block
+
+// xbSetup is only called during initial configuration of edd
+uint8_t xdSetup (char *dataArray, char *config, uint8_t cnt)   
+      // dataArray pointer is an uninitialize pointer to array to store data
+      // xdSetup must malloc dataArray pointer.  Can allocate any amount of memory >= cnt, but only first 'cnt' bytes will be stored
+      //cnt = numer of bytes available
+
+// locks data once per interval just before writing data to ETSD
+void xdReadLock(uint8_t lockData)  
+    //called with lockData = 1 approx one second before data is stored at end of ETSD block, 
+    //called again with lockData = 0 just before block commit
+     //dataArray should only be changed when lockData=0 or while xdReadLock() is active
