@@ -1,5 +1,5 @@
 /*************************************************************************
- etsdSave library for saving data to an ETSD time series database 
+ etsdSave.c library for saving data to an ETSD time series database 
 
 Copyright 2018 Peter VanDerWal 
     This program is free software: you can redistribute it and/or modify
@@ -20,7 +20,6 @@ Copyright 2018 Peter VanDerWal
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include <signal.h>
 
 #include "etsd.h"
 #include "etsdSave.h"
@@ -31,11 +30,6 @@ ETSD_INFO EtsdInfo;
 uint32_t *lastReading;
 uint8_t *missedUpdate;
 
-volatile sig_atomic_t RotateEtsd;
-
-void etsdSigHandler(int signum) {
-    RotateEtsd = 1;
-}
 
 void etsdBlockClear(uint16_t val){
 	uint_fast8_t lp, cnt=0;
@@ -43,7 +37,6 @@ void etsdBlockClear(uint16_t val){
 	    PBlock.data[lp] = val;
 	}
     PBlock.data[3] = 0;  // clear autoscalling to zero
-    signal(SIGUSR1, etsdSigHandler);   // Rotate etsd file on signal from user app
 /*
     for (lp=0;lp<EtsdInfo.channels;lp++){
         cnt += EXTS_bit(lp);
@@ -147,7 +140,7 @@ uint32_t etsdFromSigned(uint8_t bits, int32_t data) {
 
 // save "extra data"
 void saveXData(uint16_t addr, uint8_t data ) {
-    PBlock.byteD[EtsdInfo.dataStart + addr] = data;
+    PBlock.byteD[EtsdInfo.xDataStart + addr] = data;
 }
 
 
@@ -193,7 +186,7 @@ void saveAutoS(uint8_t interV, uint8_t ASC, QS_SIZE, uint32_t data){
         PBlock.data[streamStart + interV ] = data;
     } else {
         ErrorCode |= E_DATA;
-Log("Autosave data = %u \n", data);  // Pete
+Log("saveAutoS data = %u \n", data);  // Pete
     }
 }
 
@@ -345,10 +338,11 @@ void saveQS(uint8_t  interV, uint8_t extS, QS_SIZE, uint32_t data){
 // chan = 0 thru (EtsdInfo.channels-1)
 // call with interV = 0 to save registers and set counter variables.
 // call with interV > 0 to save data as either counter or gauge based on header block info.
-// Note: declaring data as 'int' should allows passing pointers to floats if needed for future upgrades
-void saveChan(uint8_t interV, uint8_t chan, uint8_t dataInvalid, int data){
+// dataInvalid 1=checksum, timeout,etc.  2 = source reset.
+// Pete: declaring data as 'int' should allows passing pointers to floats if needed for future upgrades??
+void saveChan(uint8_t interV, uint8_t chan, uint8_t dataInvalid, uint32_t data){
     uint32_t etsdData;
-    uint8_t lp, missed, goodUpdate, extS=1, reg=1, AS=0, QS=0;  
+    uint8_t lp, missed, extS=1, reg=1, AS=0, QS=0;  
     void (*funct_ptr)(uint8_t  interV, uint8_t extS, QS_SIZE, uint32_t data);  // any float data needs to be converted BEFORE calling function_pointer
     
     if(!(EtsdInfo.channels)){
@@ -361,29 +355,28 @@ void saveChan(uint8_t interV, uint8_t chan, uint8_t dataInvalid, int data){
             AS++;
         if(REG_bit(lp))     // count saved registers up to this channel
             reg++;
-        
+/*        
         if(10 > ETSD_Type(lp)){
             extS += EXTS_bit(lp);   // Count extended streams up to this channel
             QS += (ETSD_Type(lp)&14)/2;
         }else{
             QS += 4;  // for AutoScale streams
         }
-/*
+*/        
+
 //pete when adding extra types:
         if(13 > ETSD_Type(lp)){
             extS += EXTS_bit(lp);   // Count extended streams up to this channel
             QS += (ETSD_Type(lp)&14)/2;
         }else{
-            if (15==(ETSD_Type(lp))
+            if (15==(ETSD_Type(lp)))
                 QS += 4;  // for AutoScale streams
             else 
                 QS +=8; // for 32 bit or single precission float
         }
          
-*/         
     }
-    if( 0xffffffff == data) //all ones indicate error values when saved to anything
-        data--;
+
     if (interV) {   
 //Log("saveChan Interval: %d - Channel #: %d - dataInvalid: %d  data = %u ", interV, chan, dataInvalid, data);
         if(!EXTS_bit(chan)) { // channel doesn't use an extended Stream
@@ -397,6 +390,10 @@ void saveChan(uint8_t interV, uint8_t chan, uint8_t dataInvalid, int data){
                 etsdData = data; 
             }
             //goodUpdate = 0; // ignored if gauge
+            if (2&dataInvalid) {    // source reset
+                lastReading[chan] = 0xffffffff;
+                missedUpdate[chan] = 0;
+            }
             missed = 0; // don't update previous values when Absolute
         } else {        // Counter value with good data
             //goodUpdate = 1;
@@ -406,9 +403,8 @@ void saveChan(uint8_t interV, uint8_t chan, uint8_t dataInvalid, int data){
             } else {   // last reading has never been valid, nothing to compare to att
                 etsdData = 0xffffffff;
                 missed = 0;
-            }                    
-        }
-                
+            }    
+        }                
 //Log("etsdData: %d\n", etsdData); 
         switch(ETSD_Type(chan)){
             case 15:     // AutoScaling
@@ -450,7 +446,7 @@ void saveChan(uint8_t interV, uint8_t chan, uint8_t dataInvalid, int data){
                 break;
         }
 //Log("saveChan calculating missed intervals.  Interval: %d  Missed: %d  QuarterStream: %d\n", interV, missed, QS); 
-         for (lp=interV-missed; lp<=interV;lp++){  //update missing intervals 
+        for (lp=interV-missed; lp<=interV;lp++){  //update missing intervals 
             funct_ptr(lp, extS, QS, etsdData);   
         }
         if (CNT_bit(chan)){
@@ -467,6 +463,8 @@ void saveChan(uint8_t interV, uint8_t chan, uint8_t dataInvalid, int data){
         }
     } else {  // interV = 0, save registers
         if (!dataInvalid && REG_bit(chan)) {
+            if( 0xffffffff == data && CNT_bit(chan)) //all ones indicate error values
+                data++;
             saveReg(reg, data);
             if (  0xffffffff == lastReading[chan]){  //first valid reading
                 lastReading[chan] = data;
@@ -474,5 +472,5 @@ void saveChan(uint8_t interV, uint8_t chan, uint8_t dataInvalid, int data){
             }
         }
     }    
-    ELog(__func__, 0);
+    ELog(__func__, 1);
 }
