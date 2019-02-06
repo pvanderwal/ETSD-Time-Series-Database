@@ -30,7 +30,7 @@ extern "C" {
 #endif
 
 #define SRC_TYPE(a) ((EtsdInfo.source[(a)]>>6)&3)
-#define SRC_PRIMARY(a)  (!(EtsdInfo.source[(a)]&192)) 
+//#define SRC_PRIMARY(a)  (!(EtsdInfo.source[(a)]&192)) 
 #define SRC_SHM(a)  (64==(EtsdInfo.source[(a)]&192))
 #define SRC_CHAN(a) (EtsdInfo.source[(a)]&63)
 #define SRC_RESET(a) (PBlock.data[3] |= 1<<(15-a))  // steal an autoscale channel for reset indicator on ECM & SHM, steal 2 to handle 4 sources
@@ -38,7 +38,7 @@ extern "C" {
 
 #define CHK_RESET (PBlock.data[3]>>14&3)
 
-#define RRD_bit(a) (EtsdInfo.destination[(a)]&128)
+#define EXT_DB_bit(a) (EtsdInfo.destination[(a)]&128)  // External DB
 #define CNT_bit(a) (EtsdInfo.destination[(a)]&64)
 #define REG_bit(a) (EtsdInfo.destination[(a)]&32)
 #define SIGNED(a) (EtsdInfo.destination[(a)]&16)  
@@ -66,6 +66,8 @@ extern "C" {
 #endif    
 #endif
 
+#include <signal.h>
+
 const uint32_t ETSD_HEADER = 1146311749 ;   // decimal value of "ETSD"  
                                             // Note: ^epoch time: April 29, 2006 11:55:49 AM GMT, avoid saving data before that date :-)
  
@@ -73,18 +75,18 @@ const uint32_t DATA_INVALID = 0xFFFFFFFF ; // all ones
 
 extern uint32_t *lastReading;
 
-//extern volatile sig_atomic_t RotateEtsd;
+extern volatile sig_atomic_t RotateEtsd;
 
 typedef struct { 
     uint16_t header;
-    uint16_t dataStart;     
     uint16_t extStart;
     uint16_t intervalTime;
+    uint16_t xDataStart;     
+    uint8_t xData;          // size of extended data in bytes
     uint8_t blockIntervals; // total number of intervals per Block Note: number of bytes per (Full) Stream = BlockIntervals x 2
-    uint8_t dataBytes;
-    uint8_t channels;       // total channels in ETSD 
+    uint8_t channels;       // total # of channels in ETSD 
     uint8_t relCnt;         // count of "relative" streams    
-    uint8_t rrdCnt;
+    uint8_t extDBcnt;
     uint8_t registers;      // number of 'registers' saved to ETSD
     uint8_t labelSize;
     uint8_t *source;        // allocated array of source channels
