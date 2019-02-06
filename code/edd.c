@@ -91,7 +91,7 @@ uint16_t readConfig( char *fileName, int8_t *sCnt, uint16_t *checkTime, uint8_t 
         exit(1);
     }
     
-
+    ReadLock=NULL;
     *saveEDB=0;
 //printf("Config file %s\n", fileName);
     while ( fscanf(fptr,"%[^\n]\n", configLine) != EOF){
@@ -286,7 +286,7 @@ int main(int argc, char *argv[])  {
             status |= (Check_ptr[lp](checkTime[lp], Interval)&3)<<(lp*2);
         }
         ELog("Main 1", 1);
-        if ( Interval == EtsdInfo.blockIntervals && NULL != Read_ptr[4]) {  // if saving Xdata
+        if ( Interval == EtsdInfo.blockIntervals && NULL != ReadLock) {  // if saving Xdata
             ReadLock(1); // Lock xData
         }
         usleep(pause*100000);       // wait time between checking for new data and reading the data
@@ -330,7 +330,7 @@ int main(int argc, char *argv[])  {
                 Log("<5> About to write the following to the ETSD file: %s\n", EtsdInfo.fileName);
                 LogBlock(&PBlock.byteD, "ETSD", 512);
             }
-            if ( NULL != Read_ptr[4]) {  // if saving Xdata
+            if (NULL != ReadLock) {  // if saving Xdata
                 for(lp=0; lp < EtsdInfo.xData; lp++){
                     PBlock.byteD[EtsdInfo.xDataStart+lp]=xData[lp];
                 }
