@@ -61,7 +61,7 @@ void ELog(const char *cfnm, uint8_t clear){
         "Invalid start/stop time",   
         "Invalid date/time format",
         "Invalid arguement(s)",             
-        "Unknown error",
+        "Data source reset",
         "Unknown error",
         "Requested file is not an ETSD file",
         "Device specified is not a TTY device",
