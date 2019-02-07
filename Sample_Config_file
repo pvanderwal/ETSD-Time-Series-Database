@@ -1,0 +1,47 @@
+The following is a sample config file for use with the ETSD Data Director (edd) daemon.
+Saved in /etc/etsd/config.cfg
+
+#Config file setup
+#  <-- indicates comment line.  Entire line is ignored, as are blank lines.
+
+#LogFile.  If you don't specify a log file, then log entries are sent to syslog.
+L:/var/log/ecmGarage.log
+
+# Log Level: default=1  0 = no logging, 1 = minimal error logging, 2 = detailed error logging, 3 = log data output, 4 log data input
+V:4
+
+# source plugins.  Must have at least 1 source, but no more than 4.
+# The first source listed, is for ETSD source type 0, second source listed is for ETSD source type 1, etc.
+# source must specify a name (SN:) which is the name of the plugin to load.  This must be the first line of each source stanza
+# 'SC:', 'SP:', and 'ST:' refer to the preceeding 'SN:', these lines are optional/determined by plugin
+#
+# ECM-1240 plugin
+#SN:/path/to/edsECM.so
+SN:/usr/local/lib/libedsECM.so
+SP:/dev/garage
+# SC: config string [optional], entire line except 'SC:' is passed to plugin
+SC:/shmECM
+# Source time for plugin.  How long plugin is allowed to wait for new data
+ST:2
+#  Note: sleep time = interval time - 0.5*sourcetime for each plugin
+
+
+# External database plugin.
+# if using, Plugin name (DN:) is required.  Everything else is depneds on the plugin
+#DN:/path/to/edbRRD.so
+DN:/usr/local/lib/libedbRRD.so
+#DC:  ExtDB config string, [optional]
+#DF:/path/to/database.rrd
+DF:/tmp/garage.rrd
+# load labels, if yes then the label names from the ETSD will be loaded and passed to the plugin during initialization
+DL:Yes
+# Simultaneous save to external db. Yes means save to ExtDB in real time.
+# Config file can be shared with etsdCmd allowing you to "restore" an External DB later.
+DS:yes
+
+
+#  Name and location of ETSD db file.
+T:/var/db/garage.tsd
+
+#XN:/path/to/XtraData_plugin
+#XC: xData config string [optional]
