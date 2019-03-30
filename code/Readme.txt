@@ -1,3 +1,5 @@
+Instructions for building ETSD on Linux
+
 //build errorlog shared library
 gcc errorlog.c -c -fpic
 gcc *.o -shared -o /usr/local/lib/libelog.so
@@ -51,6 +53,3 @@ gcc -o edd edd.c -lelog -letsdSave -letsd -lrt -ldl
 
 // update ldconfig cache
 ldconfig
-
-
-./etsdCmd dump /var/db/garage.tsd s=1546304763 e=1546305363 o=e
