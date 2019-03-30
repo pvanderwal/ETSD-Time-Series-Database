@@ -36,7 +36,6 @@ Copyright 2018 Peter VanDerWal
 #include "etsd.h"
 #include "etsdSave.h"
 #include "errorlog.h"
-#include "edd.h"
 
 int8_t Interval;
 volatile sig_atomic_t Reload;    // reload config file
