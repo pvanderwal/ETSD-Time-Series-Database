@@ -31,22 +31,21 @@ Copyright 2018 Peter VanDerWal
 uint8_t ChannelCnt;
 char *RRDFile;
 
-// not using *Config, *cfgfn(configFileName), chanCnt, ChanDefs, or **chanNames
-uint8_t edoSetup(char *Config, char *DBfileName, char *cfgfn, uint8_t chanCnt, uint16_t ChanDefs, char **chanNames){
+// not using *Config, *cfgfn(configFileName), chanCnt, ChanDefs, **chanNames or xdSize
+uint8_t edoSetup(char *Config, char *DBfileName, char *cfgfn, uint8_t chanCnt, uint16_t ChanDefs, char **chanNames, uint8_t xdSize){
     RRDFile = (char*) malloc(strlen(DBfileName)+1);  // Pete should test to see if this fails
     strcpy(RRDFile, DBfileName);
     ChannelCnt = chanCnt;
     return 0;
 }
 
-// not using interval
-// cnt is the number of channels to save, dataArray is an array of those channels, 
+// not using interval or xData
 // *status array matches *dataArray  per channel:  0 = ok, 1 = data invalid, 2=src_reset
-uint8_t edoSave(uint32_t timeStamp, uint8_t cnt, uint32_t *dataArray, uint8_t *status, uint8_t interval){
+uint8_t edoSave(uint32_t timeStamp, uint8_t interval, uint32_t *dataArray, uint8_t *status, uint8_t *xData){
     uint8_t lp;
     uint32_t newData;
 //    char rrdValues[EtsdInfo.rrdCnt + 1][12];
-    char rrdValues[cnt*11+15];
+    char rrdValues[ChannelCnt*11+15];
     char tempVal[15];
     char *rrdParams[] = { "rrdupdate", RRDFile, rrdValues, NULL }; 
     
@@ -58,7 +57,7 @@ uint8_t edoSave(uint32_t timeStamp, uint8_t cnt, uint32_t *dataArray, uint8_t *s
     }
 //    sprintf(rrdValues,"N");
     
-    for (lp=0; lp<cnt; lp++){
+    for (lp=0; lp<ChannelCnt; lp++){
        if (status[lp] || dataArray[lp] == 0xFFFFFFFF){  // if source, or data, is invalid
             sprintf(tempVal,":U");
        }else{

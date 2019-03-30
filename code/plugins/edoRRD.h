@@ -24,7 +24,7 @@ Copyright 2018 Peter VanDerWal
 extern "C" {
 #endif
 
-uint8_t edoSetup(char *Config, char *DBfileName, char *cfgfn, uint8_t chanCnt, uint16_t ChanDefs, char **chanNames);
+uint8_t edoSetup(char *Config, char *DBfileName, char *cfgfn, uint8_t chanCnt, uint16_t ChanDefs, char **chanNames, uint8_t xdSize);
 
 uint8_t edoSave(uint32_t timeStamp, uint8_t interval, uint32_t *dataArray, uint8_t *status, uint8_t *xData);
 

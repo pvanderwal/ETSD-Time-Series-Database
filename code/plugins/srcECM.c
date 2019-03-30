@@ -1,5 +1,5 @@
 /*************************************************************************
-srcECM.c ETSD plugin to receive and parse serial data from an Brultech ECM-1240
+esrECM.c ETSD plugin to receive and parse serial data from an Brultech ECM-1240
 
 Copyright 2018 Peter VanDerWal 
 
@@ -224,6 +224,10 @@ uint32_t srcReadChan (uint8_t chan){
             uint8_t cpy[4];
         } rval;
         chan = chan*5-1;
+/*//      data = dataU->byteD[chan++];
+//      data += dataU->byteD[chan++]<<8;
+//      data += dataU->byteD[chan++]<<16;
+//      data += dataU->byteD[chan+3]<<24; */
 
         for (lp = 0; 4 > lp; lp++) {
             rval.cpy[lp] = dataU->byteD[chan++];
