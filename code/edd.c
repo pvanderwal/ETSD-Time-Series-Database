@@ -36,6 +36,7 @@ Copyright 2018 Peter VanDerWal
 #include "etsd.h"
 #include "etsdSave.h"
 #include "errorlog.h"
+#include "edd.h"
 
 int8_t Interval;
 volatile sig_atomic_t Reload;    // reload config file
@@ -80,14 +81,13 @@ uint16_t readConfig( char *configFileName, SRC_PLUGIN SrcPlugin[4], uint16_t *ch
     char *etsdFile=NULL, *ptr;
     char **chanNames=NULL;       // Array of string pointers
     uint16_t *chanDefs=NULL;       
-
     uint8_t (*srcSUp)(char *config, char *source, char *configFileName, uint16_t etsdHeader, uint16_t intervalTime);  
-    //*Func EDO plugin edoSetup()
-    uint8_t (*edoSUp)(char *config, char *destination, char *configFileName, uint8_t chanCnt, uint16_t *chanDefs, char **chanNames ); 
-    uint8_t lp, loadNames = 0, keepNames=0;
+    uint8_t (*edoSUp)(char *config, char *destination, char *configFileName, uint8_t chanCnt, uint16_t *chanDefs, char **chanNames, uint8_t xdSize ); 
+    uint8_t lp, xdSize = 0, loadNames = 0, keepNames=0;
     char configLine[260];
     int8_t srcCnt=-1;
-
+//    char *pluginCfg[6]={NULL}; // Array to hold plugin 'config' strings (all plugins)
+//    char *pluginPrt[5]={NULL}; // Array to hold plugin port/filename/?? strings
     struct {
         char *config;
         char *pds;          // port/destination/source used for source/edo/xdata
@@ -124,7 +124,6 @@ uint16_t readConfig( char *configFileName, SRC_PLUGIN SrcPlugin[4], uint16_t *ch
                         Log("\n\nError!  Config file contains too many data sources.  ETSD supports a maximum of 4 data sources.\nAborting, please fix config file.\n");
                         exit(1);
                     }
-
                     SrcPlugin[srcCnt].handle = dlopen (ptr, RTLD_LAZY);
                 } else if ('P'==configLine[1] ){                        
                     cfgStrings[srcCnt].pds = (char*) malloc(strlen(ptr)+1);
@@ -145,10 +144,12 @@ uint16_t readConfig( char *configFileName, SRC_PLUGIN SrcPlugin[4], uint16_t *ch
                 }else if ('D'==configLine[1] ){     // EDO *destination
                     cfgStrings[4].pds = (char*) malloc(strlen(ptr)+1);
                     strcpy(cfgStrings[4].pds, ptr);
-                } else if ('L'==configLine[1] ){ 
-                    loadNames = atoi(ptr); 
                 } else if ('K'==configLine[1] ){ 
                     keepNames = atoi(ptr);
+                } else if ('L'==configLine[1] ){ 
+                    loadNames = atoi(ptr); 
+                } else if ('X'==configLine[1] ){ 
+                    xdSize = atoi(ptr);
                 }                 
                 break;
             case 'L':                       // Log file
@@ -180,9 +181,11 @@ uint16_t readConfig( char *configFileName, SRC_PLUGIN SrcPlugin[4], uint16_t *ch
         Log("\n\nError!  Must specify the ETSD file.\n");
         exit(1);        
     } else {
+printf("etsdFile: %s \n", etsdFile);
         etsdInit(etsdFile, loadNames);       
     }
 
+printf("Got here 2\n");
     srcCnt++;
     if (!srcCnt){
         Log("\n\nError! Must specify at least one data source.\n");
@@ -202,9 +205,12 @@ uint16_t readConfig( char *configFileName, SRC_PLUGIN SrcPlugin[4], uint16_t *ch
         *(void **)(&edoSUp)=dlsym(handle[0],"edoSetup");
         *(void **)(&edoSave)=dlsym(handle[0],"edoSave");
         
+//        chanDefs = calloc(EtsdInfo.edoCnt * sizeof(uint16_t));
         chanDefs = malloc(EtsdInfo.edoCnt * 2);
         if (loadNames) 
             chanNames = malloc(EtsdInfo.edoCnt *  sizeof(char*));
+    //    else
+    //        chanNames = calloc(sizeof(char*));  // Leave pointer at null
             
         for(lp=0;lp<EtsdInfo.channels;lp++){
             if(EDO_BIT(lp)){
@@ -216,7 +222,7 @@ uint16_t readConfig( char *configFileName, SRC_PLUGIN SrcPlugin[4], uint16_t *ch
         free(EtsdInfo.label);       // don't need the labels anymore
         free(EtsdInfo.labelBlob); 
         
-        edoSUp(cfgStrings[4].config, cfgStrings[4].pds, configFileName, EtsdInfo.edoCnt, chanDefs, chanNames);  // setup external data output
+        edoSUp(cfgStrings[4].config, cfgStrings[4].pds, configFileName, EtsdInfo.edoCnt, chanDefs, chanNames, xdSize );  // setup external data output
 
         free(chanDefs);
         if (!keepNames){
@@ -243,6 +249,7 @@ int main(int argc, char *argv[])  {
     pid_t sid = 0;
 #endif
 //#define sleepTime 8     // Note: there is an additional 1 second used to synchronize SHM data
+//#define checkTime 30    // in 1/10 second increments so 30 = 3 seconds
 
     if (2 > argc){
         printf("\n\nNo config file specified, aborting\n\n");
@@ -279,7 +286,10 @@ int main(int argc, char *argv[])  {
     signal(SIGHUP, sig_handler);    // user closed virtual terminal.  //Pete possibly restart as daemon?
     signal(SIGUSR2, sig_handler);   // reload config file
 
+    //ecmSetup(TTYPort, EcmShmAddr);
     ELog("Main Clear Errors", 1);      //log any errors and zero ErrorCode
+
+    //while (Check_src[0](110, 0));   // Pete need a better way to check multiple sources.  // wait for good data, 110 = 11 second 
 
     Reload = 1;
     while (1) {
@@ -287,7 +297,7 @@ int main(int argc, char *argv[])  {
         uint8_t lp, checkstat;
         uint8_t  srcReset=0, status[4]={0}, pause=10, statArr[EtsdInfo.edoCnt];
 
-        if(Reload){     // reload config file
+        if(Reload){
             Reload = 0;
             Interval = 0;
             srcCnt = readConfig( argv[1], SrcPlugin, &checkTime);
@@ -327,12 +337,13 @@ int main(int argc, char *argv[])  {
                     statArr[edoCnt]=status[SRC_TYPE(lp)];
                     dataArray[edoCnt++]=data;
                 }
+                // Save to ETSD
  
                 if(ETSD_TYPE(lp)){    // save channel to etsd
                     saveChan(Interval, lp, status[SRC_TYPE(lp)], data);  
                 }
             }
-
+            //if(NULL !=(*edoSave)){
             if(edoSave){
                 edoSave( 0, Interval, dataArray, statArr, &PBlock.byteD[EtsdInfo.xDataStart] );
             }
@@ -367,6 +378,8 @@ int main(int argc, char *argv[])  {
             for (lp=0; lp<EtsdInfo.channels; lp++){
                 if(ETSD_TYPE(lp)){    // save channel to etsd
                     saveChan(Interval, lp, status[SRC_TYPE(lp)], data);
+                    //checkstat=(status>>(SRC_TYPE(lp)*2))&3;
+//pete fix                    saveChan(Interval, lp, checkstat, checkstat?0xFFFFFFFF:(Read_src[SRC_TYPE(lp)](SRC_CHAN(lp), Interval)));  
                 }
             }
         }
