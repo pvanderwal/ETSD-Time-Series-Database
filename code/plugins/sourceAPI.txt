@@ -1,0 +1,56 @@
+/*************************************************************************
+source API for ETSD plugin.  Plugin is used to provide source data to ETSD
+
+Copyright 2019 Peter VanDerWal 
+
+In order to work with ETSD:
+   Function names must be as specified below,
+   Functions must return the values/types listed
+   and the functions must accept the listed parameter types
+
+Note: while functions are required to accept the listed parameter types, you are not required to use the passed parameters, 
+please feel free to ignore any parameter that does not make sense for your plugin
+
+
+    Note: this code was writen using information from Brultech's document: ECM1240_Packet_format_ver9.pdf
+    Brultech has kindly agreed to let me release this code as 'opensource' software.
+    However, I am not a lawyer and since this code was derived from Brultech's proprietary information,  
+    if you intend to use or distribute this code in a commercial application, just to be on the safe side,
+    you should probably contact Brultech first.  
+    https://www.brultech.com/contact/
+    
+    This code is free: with the above stipulation you can redistribute it and/or modify
+    it under the terms of the GNU General Public License version 2.0 as published by
+    the Free Software Foundation.
+    
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*********************************************************************************/
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// return values 0=success, 1 = error, 
+// *config and *source are strings listed in the ETSD config file specified as # SC: config string # Data Source SP:
+// *configFileName is the /path/to/configFile specified when starting up ETSD
+uint8_t srcSetup(char *config, char *source, char *configFileName, uint16_t etsdHeader, uint16_t intervalTime);
+
+
+// timeOut in 1/10 second increments
+// returns  DATA_VALID  0 = rx good data, 1 = checksum/CRC error, 2=source reset, 5 = timed out no data, 9 = unspecified error, 128=updating 
+uint8_t srcCheckData(uint16_t timeOut, uint8_t interval);
+
+// returns data  from the specified channel
+uint32_t edsReadChan (uint8_t chan);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif
