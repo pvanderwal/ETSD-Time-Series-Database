@@ -1,0 +1,150 @@
+Offers high reliability, each 'Block' of data occupies 1 512byte sector on hard drive, thumb drive or SD card.
+Each Block is self contained, so even if directory table is damaged you might be able to recover data by scanning Sectors.
+ETSD uses ~1/4 the space required for an RRD with same datapoints running on a 32bit OS (~1/8 on 64bit OS?)
+
+Note: A 'Channel' is the source of the data, a 'Stream' is the data coming from the Channel
+Header for Data Blocks
+    4 bytes         Epoch time at start of page (time when first ECM packet received)
+    2 bytes         MSb x2 = user ID | 7 bits =  Total intervals | 7 bits = Valid intervals    Note:  Unit Unique ID (UUID) = first 9 bits
+    2 bytes         Auto-Scaling(default) for up to 8 Channels, 2 bits per Channel 1,2,4,8x  
+                Note: 	8x scaling can handle ~218A @ 240V
+
+504 bytes  for data 
+    New design, supports 1 - 63 Channels of data in any combination of FullStreams(FS), HalfStreams(HS) or QuarterStreams(QS)
+    To conserve space FS are saved first(begining of block), then HS, finally QS.
+ 
+Can support extended Data Channels(ExtD) which add 2 bits per interval, per extended DS.  Each ExtD adds (intervals * 0.25 bytes)
+    Full, 1/2 or 1/4 Channels can be extended  
+
+ECM-1240 Default format:
+    9 Fullstreams (ECM Ch1A, Ch2A, Ch1P, Ch2P, Aux1-5) @ 10 second intervals (24 intervals)
+    Plus Halfstream for AC Voltage, 
+    Plus 36 bytes data (Save ECM  Registers) 
+    Plus 2 extended data streams (12 bytes)  
+
+Alt format 1 
+    7 FS        Power flow  (Ch1A, Ch2A, Aux1-5)
+    1 FS        External power: Fridge or freezer power consumption
+    1 QS        Main water flow: pulse count for last 10 seconds
+    1 QS        Hot water flow:  8 ounce increments, 6 GPM max
+    1 QS        Evap cooler flow: 8 ounce increments, 6 GPM max
+    
+    52 bytes    Registers 7x ECM, external power, Main Water, Hot water, Cooler water, Cooler runtime, Solar heater runtime
+    25 intervals, 2 bytes spare      
+            524278
+Auto-Scaling can handle values up to 524,287 per interval.  Assuming 10 second intervals:
+Scaling not required on any channel less than ~6.5kW (240V @ ~27A), zero storage error
+2x scaling can handle power levels up to 13.1kW (240V @ ~54.5A)	up to 1 watt second error per data point
+4x scaling can handle power levels up to 26.2kW (240V @ ~109A)   up to 2 second error per data point
+8x scaling can handle 52kW (240V @ ~218 amps) (1x,2x,4x,8x)      up to 4 watt second error per data point
+per minute with 8x scaling: max error = 24 watt seconds, average error ~3 watt seconds
+
+127 intervals per block max. 
+Maximum channels can not add up to more than 256 quarter streams so: 31x 32bit streams, or 63x FS, or 127x HS, etc. (127 chan max limit)
+First Block of etsd file contains config data that maps Source Channels to Destination Streams.       
+    4 bytes 0x43666745  "CfgE"          Note: equals epoch date October 31, 2005 6:49:41 PM  (note: vers 1.0 only supports 1 block headers)
+    2 bytes dbInfo      MSbx2: userID  | 7 bits: Total intervals | 7 bits: # of channels  //little endian
+    2 bytes Intv Time   Note:  maximum interval = ~18 hours
+	1 byte  label size 1/2.  Multiply by 2 for label size. 
+    1 byte  extra data  Number of bytes
+
+    # of channels x 2 bytes per channel
+        1 byte:     Source:       (MSbx2) 0=Native(GEM, ECM, etc.), 1=SHM, 2=Other(TCP?), 3=Other(NamedPipes?) | (6 bits) source channel #   
+        1 byte:     Destination:  MSbx1 ExtDB | (64) 0=guage/1=counter | (32) save register | (16) Signed Integer | LSbx4 Stream Type  
+                            Note: MSb^ indicates saving this channel to external database
+
+                            remaining bytes: etsd Channel labels, variable length / each label null terminated
+            
+  ETSD Stream Types           Bits per interval
+   15 = AutoScale               (16)        up to 7 channels are available and automatically allocated 
+   (change to type 15?)                     ^(ONLY works with unsigned Ints!!!)  
+
+   14 = 1/2 Precision float     (16) bits  (not yet implemented)
+   13 = Double Stream           (32) bits       Note: single/double precision floats can be converted by user source plugin and saved to double stream, etc.
+   12 = Large Stream            (24) bits
+  *11 = Extended 20bit stream   (22) bits
+  *10 = 20bit stream            (20) bits
+    9 = Extended Full Stream    (18) bits
+    8 = Full Stream             (16) bits
+   *7 = Extended Short stream   (14) bits
+   *6 = Short stream            (12) bits
+    5 = Extended Half Stream    (10) bits
+    4 = Half Stream             ( 8) bits
+   *3 = Extended Quarter Stream ( 6) bits
+   *2 = Quarter Stream          ( 4) bits
+    1 = Two bit stream          ( 2) bits
+    0 = don't save to ETSD
+*These types combined a Half or Full stream with a Quarter stream.  To conserve space, 'quarter' streams are placed after all other types    
+
+= 1/2 Precision float     (16) bits   See https://en.wikipedia.org/wiki/Half-precision_floating-point_format for limitations on 1/2 precision floats 
+sort order
+15, 14, 13, 9, 8, 12, 5, 4, 11, 10, 7, 6, 3, 2, 1  
+
+Planned enhancements
+    support signed integers (almost ready)
+    Add 32bit signed & unsigned int streams
+    Add 1/2 precision floating point support (especially ARM version)
+    Add single precision floating point support
+Possible     enhancements
+    optional 1024 byte blocks
+    optional extended headers for 512byte blocks 
+    24 bit streams, plus extended?
+Maybe in version 2
+    use 2048 byte blocks instead of 512
+        this would allow more than 63 channels, potentially up to 255?
+                                  
+ECM Channel Numbers
+32 bit channels
+    Ch#
+    1   Ch1A
+    2   Ch2A
+    3   Ch1P
+    4   Ch2P
+    5   Aux1
+    6   Aux2
+    7   Aux3
+    8   Aux4
+    9   Aux5
+
+16 bit channels
+    Ch#
+    10  DCV         // Note: edsECM converts this to 8 bits
+    11  ACV
+    24  CH1 Current
+    25  CH2 Current
+
+Notes:  not thread safe.  Is this important?  Ask StackOverflow.
+    
+    
+SHM
+RRD
+Extend
+ECM F H Q  Autoscale/no chan(ExtD)
+
+10+ 35 per DS + 140 rras
+    
+Importing data to RRDtool
+10 second intervals for 24 hrs		8640 dp  Note: 1080P can display 1 minute resolution
+RRA
+1 minute intervals for 1 days		1440 dp                     60 sec
+7 minute intervals for 7 days		1440 dp                     420 sec
+30 minute intervals for 31 days		1488 dp                     1800 sec
+6 hr intervals for 365 days, 		1464 dp                     21900 sec
+1 day intervals for 5 years			1827 DP
+
+rrdtool update <filename.rrd> -s {epoch timestamp}:value:value:value: etc.
+
+rrdtool create filename [--start|-b start time] [--step|-s step] [--template|-t template-file] [--source|-r source-file] [--no-overwrite|-O] 
+ [DS:ds-name[=mapped-ds-name[[source-index]]]:DST:dst arguments] [RRA:CF:cf arguments]
+
+DS:ds-name:{GAUGE | COUNTER | DERIVE | DCOUNTER | DDERIVE | ABSOLUTE}:heartbeat:min:max
+
+RRA:{AVERAGE | MIN | MAX | LAST}:xff:steps:rows
+
+xff The xfiles factor defines what part of a consolidation interval may be made up from *UNKNOWN* data while the consolidated value is still regarded as known. It is given as the ratio of allowed *UNKNOWN* PDPs to the number of PDPs in the interval. Thus, it ranges from 0 to 1 (exclusive).
+ 
+rrdtool create /var/rrd/ecmD.rrd --step 10 DS:Ch1A:COUNTER:12:0:20000 DS:Ch2A:COUNTER:12:0:5000 DS:Ch1P:COUNTER:12:0:5000 DS:Ch2P:COUNTER:12:0:5000 DS:Aux1:COUNTER:12:0:7000 DS:Aux2:COUNTER:12:0:7000 DS:Aux3:COUNTER:12:0:7000 DS:Aux4:COUNTER:12:0:7000 DS:Aux5:COUNTER:12:0:7000 DS:Volts:GAUGE:12:0:270 RRA:LAST:0.8:1:8700 RRA:AVERAGE:0.65:6:2900 RRA:AVERAGE:0.65:45:1350 RRA:AVERAGE:0.65:180:1500 RRA:MAX:0.65:180:1500 RRA:MIN:0.65:180:1500 RRA:AVERAGE:0.65:2160:1500 
+
+rrdtool create /var/rrd/garage.rrd --step 10 DS:Ch1A:COUNTER:12:0:26215 DS:Ch2A:COUNTER:12:0:26215 DS:Ch1P:COUNTER:12:0:26215 DS:Ch2P:COUNTER:12:0:26215 DS:Aux1:COUNTER:12:0:7000 DS:Aux2:COUNTER:12:0:7000 DS:Aux3:COUNTER:12:0:7000 DS:Aux4:COUNTER:12:0:7000 DS:Aux5:COUNTER:12:0:7000 DS:Volts:GAUGE:12:0:270 RRA:LAST:0.8:1:8700 RRA:AVERAGE:0.65:6:2900 RRA:AVERAGE:0.65:45:1350 RRA:AVERAGE:0.65:180:1500 RRA:MAX:0.65:180:1500 RRA:MIN:0.65:180:1500 RRA:AVERAGE:0.65:2160:1500
+
+Water measure temperature of pex (after manifold) to determine what is using the water?
