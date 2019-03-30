@@ -180,11 +180,9 @@ uint16_t readConfig( char *configFileName, SRC_PLUGIN SrcPlugin[4], uint16_t *ch
         Log("\n\nError!  Must specify the ETSD file.\n");
         exit(1);        
     } else {
-printf("etsdFile: %s \n", etsdFile);
         etsdInit(etsdFile, loadNames);       
     }
 
-printf("Got here 2\n");
     srcCnt++;
     if (!srcCnt){
         Log("\n\nError! Must specify at least one data source.\n");
